@@ -232,13 +232,29 @@ class DataSource(object):
     def get_results(self, limit=None, wait=None, reset=True, order='index', keep=0):
         """Return a DataSet from the DataSource
 
+        The get_results() method returns the data identified by the
+        select() method as a DataSet.
+
         Keyword Parameters:
 
-        limit  -- The maximum number of records to return
-        wait   -- A wait-specification that indicates how to wait for
-                  results if the data available is less than 'limit'
-        result -- Set to True to start at the beginning of the matching data
-        keep   -- Return [0..keep] as the [N-keep, N] values from the previous result.
+        limit -- The maximum number of records to return. This limits
+                 how large each series in the resulting DataSet. If
+                 not specified, the limit is DataSource.window_size
+
+        wait  -- A wait-specification that indicates how to wait for
+                 results if the data available is less than
+                 'limit'. See Sos.Query.query() for more information.
+
+        reset -- Set to True to re-start the query at the beginning of
+                 the matching data.
+
+        keep  -- Return [0..keep] as the [N-keep, N] values from the
+                 previous result. This is useful when the data from
+                 the previous 'window' needs to be combined with the
+                 the next window, for example when doing 'diff' over a
+                 large series of input data, the last sample from the
+                 previous window needs to be subtracted from the first
+                 sample of the next window (see Transform.diff())
         """
         if limit is None:
             limit = self.window
