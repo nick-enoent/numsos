@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+from numsos.DataSink import CsvDataSink, SosDataSink
+from numsos.ArgParse import ArgParse
+import datetime as dt
+import sys
+
+def format_timestamp(d):
+    d = dt.datetime.fromtimestamp(d)
+    return str(d)
+
+if __name__ == "__main__":
+    parser = ArgParse(description="Export Sos data to a CSV")
+    parser.add_argument("--csv", required=True, help="The path to the output CSV file.")
+    args = parser.parse_args()
+
+    (start, end) = parser.get_times(args)
+    sos = SosDataSource()
+    sos.config(path=args.path)
+    sos.select([ 'meminfo.*', 'jobinfo.*' ],
+              from_    = [ 'meminfo', 'jobinfo' ],
+              where    = [ [ 'timestamp', Sos.COND_GE, start ],
+                           [ 'job_id', Sos.COND_GT, 1 ]
+                         ],
+              order_by = 'job_comp_time')
+
+    count = 0
+    res = sos.get_results()
+    if res is None:
+        print("No data met the selection criteria.")
+        sys.exit(0)
+
+    series_list = res.series
+    series_list[0] = Sos.ColSpec('meminfo.timestamp', cvt_fn=format_timestamp)
+
+    csv = CsvDataSink()
+    csv.config(path=args.csv)
+    csv.insert(series_list, into = 'memory_utilization')
+
+    while res:
+        count += res.get_series_size()
+        csv.put_results(res)
+        res = sos.get_results(reset=False)
+
+    print("{0} records exported".format(count))
+
+

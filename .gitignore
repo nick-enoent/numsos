@@ -1,0 +1,10 @@
+*~
+aclocal.m4
+build/*
+Makefile.in
+configure
+config/
+build*/
+config.h.in
+*.swp
+*.pyc

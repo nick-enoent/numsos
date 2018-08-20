@@ -1,0 +1,139 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+from numsos.DataSink import CsvDataSink, SosDataSink
+from numsos.Transform import Transform
+from numsos.DataSet import DataSet
+from numsos.Stack import Stack
+from numsos.ArgParse import ArgParse
+import numpy as np
+import datetime as dt
+import time
+
+def format_timestamp(d):
+    d = dt.datetime.fromtimestamp(d)
+    return str(d)
+
+def wait_for_row_count(query, row, row_count, wait_arg):
+    if row_count < wait_arg['row_limit']:
+        time.sleep(wait_arg['wait_time'])
+        return True
+    return False
+
+if __name__ == "__main__":
+    parser = ArgParse("Compute network statistics across components")
+    parser.add_argument(
+        "--result_path", required=True,
+        help="The path to the result database.")
+
+    args = parser.parse_args()
+    cont = Sos.Container(args.path)
+
+    now = dt.datetime.now()
+    now = int(now.strftime('%s')) - 60
+    comp_ids = [ comp for comp in range(10001, 10002) ]
+
+    xfrms = []
+    for comp_id in comp_ids:
+        ds = SosDataSource()
+        ds.config(cont=cont)
+        ds.select([ 'procnetdev.*' ],
+                  from_    = [ 'procnetdev' ],
+                  where    = [ [ 'timestamp', Sos.COND_GE, now ],
+                               [ 'component_id', Sos.COND_EQ, comp_id ]
+                           ],
+                  order_by = 'comp_time')
+        xfrms.append(Transform(ds, None, limit=256))
+
+    # Configure the CSV data sink
+    csv = CsvDataSink()
+    csv.config(path="./netstat.csv", header=True)
+    csv.insert(
+        [
+            Sos.ColSpec("timestamp", cvt_fn=format_timestamp),
+            Sos.ColSpec("job_id", cvt_fn=int),
+            Sos.ColSpec("component_id", cvt_fn=int),
+            "rx_bytes#p7p2_diff",
+            "tx_bytes#p7p2_diff",
+            "rx_packets#p7p2_diff",
+            "tx_packets#p7p2_diff"
+        ],
+        into="netstat")
+
+    # Configure the Sos data sink
+    sink = SosDataSink()
+    sink.config(path="/DATA15/orion/ldms_results", create=True)
+    sink.insert(
+        [
+            Sos.ColSpec("timestamp"),
+            Sos.ColSpec("job_id", cvt_fn=int),
+            Sos.ColSpec("component_id", cvt_fn=int),
+            "rx_bytes#p7p2_diff",
+            "tx_bytes#p7p2_diff",
+            "rx_packets#p7p2_diff",
+            "tx_packets#p7p2_diff"
+        ],
+        into = { "schema" : "netstat", "attrs" :
+                 [
+                     { "name" : "rx_bytes#p7p2_diff",   "type" : "double" },
+                     { "name" : "tx_bytes#p7p2_diff",   "type" : "double" },
+                     { "name" : "rx_packets#p7p2_diff", "type" : "double" },
+                     { "name" : "tx_packets#p7p2_diff", "type" : "double" }
+                 ]
+               }
+        )
+
+    series_list = [
+        "rx_bytes#p7p2",
+        "tx_bytes#p7p2",
+        "rx_packets#p7p2",
+        "tx_packets#p7p2",
+    ]
+
+
+    waiter=( wait_for_row_count, { 'row_limit' : 10, 'wait_time' : 5 } )
+    for xfrm in xfrms:
+        xfrm.begin(count=10, wait=waiter)
+
+    run = True
+    while run:
+        for xfrm in xfrms:
+            # Duplicate the input
+            xfrm.dup()
+
+            xfrm.diff(series_list)
+
+            # The input is now on top with the difference at TOP~1
+            xfrm.swap()
+
+            # The 'diff' transform results in one less sample in the
+            # output than there are in the input. Extract the samples
+            # from the input that apply to the output and put them
+            # back on top of the stack
+            series_size = xfrm.top().get_series_size()
+            xfrm.extract([ "timestamp",
+                           "job_id",
+                           "component_id"
+                         ],
+                         # This skips the 1st row of the input
+                         rows = (1, series_size) 
+                    )
+
+            # Include the columns from the input in the output
+            xfrm.append()
+            res = xfrm.stack.pop()
+
+            # Print it for fun
+            res.show(width=20)
+
+            # Store it in the CSV
+            csv.put_results(res)
+
+            # Store it in the SOS
+            sink.put_results(res)
+
+            # We want the last sample of the previous batch to be the
+            # 1st sample of the next batch, otherwise we'll skip a
+            # second on each batch.
+            xfrm.next(count=10, wait=waiter, keep=1)
