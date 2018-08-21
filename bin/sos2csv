@@ -13,17 +13,16 @@ def format_timestamp(d):
 
 if __name__ == "__main__":
     parser = ArgParse(description="Export Sos data to a CSV")
-    parser.add_argument("--csv", required=True, help="The path to the output CSV file.")
+    parser.add_argument("--schema", required=True, help="The schema to output.")
+    parser.add_argument("--csv", help="The path to the output CSV file.")
     args = parser.parse_args()
 
     (start, end) = parser.get_times(args)
     sos = SosDataSource()
     sos.config(path=args.path)
-    sos.select([ 'meminfo.*', 'jobinfo.*' ],
-              from_    = [ 'meminfo', 'jobinfo' ],
-              where    = [ [ 'timestamp', Sos.COND_GE, start ],
-                           [ 'job_id', Sos.COND_GT, 1 ]
-                         ],
+    sos.select([ args.schema + '.*' ],
+              from_    = [ args.schema ],
+              where    = [ [ 'timestamp', Sos.COND_GE, start ] ],
               order_by = 'job_comp_time')
 
     count = 0
@@ -33,11 +32,22 @@ if __name__ == "__main__":
         sys.exit(0)
 
     series_list = res.series
-    series_list[0] = Sos.ColSpec('meminfo.timestamp', cvt_fn=format_timestamp)
+    idx = series_list.index('timestamp')
+    if idx >= 0:
+        series_list[idx] = Sos.ColSpec('timestamp', cvt_fn=format_timestamp)
+    idx = series_list.index('component_id')
+    if idx >= 0:
+        series_list[idx] = Sos.ColSpec('component_id', cvt_fn=int)
+    idx = series_list.index('job_id')
+    if idx >= 0:
+        series_list[idx] = Sos.ColSpec('job_id', cvt_fn=int)
 
     csv = CsvDataSink()
-    csv.config(path=args.csv)
-    csv.insert(series_list, into = 'memory_utilization')
+    if args.csv:
+        csv.config(path=args.csv)
+    else:
+        csv.config()
+    csv.insert(series_list, into = args.schema)
 
     while res:
         count += res.get_series_size()

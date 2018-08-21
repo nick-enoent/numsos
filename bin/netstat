@@ -55,8 +55,8 @@ if __name__ == "__main__":
     csv.insert(
         [
             Sos.ColSpec("timestamp", cvt_fn=format_timestamp),
-            Sos.ColSpec("job_id", cvt_fn=int),
             Sos.ColSpec("component_id", cvt_fn=int),
+            Sos.ColSpec("job_id", cvt_fn=int),
             "rx_bytes#p7p2_diff",
             "tx_bytes#p7p2_diff",
             "rx_packets#p7p2_diff",
@@ -68,22 +68,22 @@ if __name__ == "__main__":
     sink = SosDataSink()
     sink.config(path="/DATA15/orion/ldms_results", create=True)
     sink.insert(
+        sink.Metric_Columns +
         [
-            Sos.ColSpec("timestamp"),
-            Sos.ColSpec("job_id", cvt_fn=int),
-            Sos.ColSpec("component_id", cvt_fn=int),
             "rx_bytes#p7p2_diff",
             "tx_bytes#p7p2_diff",
             "rx_packets#p7p2_diff",
             "tx_packets#p7p2_diff"
         ],
         into = { "schema" : "netstat", "attrs" :
+                 sink.Metric_Attrs +
                  [
                      { "name" : "rx_bytes#p7p2_diff",   "type" : "double" },
                      { "name" : "tx_bytes#p7p2_diff",   "type" : "double" },
                      { "name" : "rx_packets#p7p2_diff", "type" : "double" },
                      { "name" : "tx_packets#p7p2_diff", "type" : "double" }
                  ]
+                 + sink.Metric_Joins
                }
         )
 
