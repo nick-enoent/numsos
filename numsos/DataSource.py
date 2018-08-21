@@ -110,29 +110,25 @@ class ResultByColumnInputer(object):
         return result
 
 class DataSource(object):
+
+    DEF_LIMIT     = 4096
+    DEF_COL_WIDTH = 16
+
     """Implements a generic analysis Transform data source.
 
-    A Transform data source returns one or more records to the caller
-    of the input function. A record is a logical datum from the data
-    store and is defined by the select() method. Each record consists
-    of one or more attributes that are contained in the data store. An
-    attribute is logically a column in an SQL table or an object
-    attribute in an object store. See the select() method for more
-    information.
+    A DataSource  is a  generic interface to  a container.  An program
+    does  not instantiate  the  DataSource, rather  it instantiates  a
+    SosDataSource or CsvDataSource. A SosDataSource is backed by a SOS
+    Container, and a CsvDataSource is backed by a text file.
 
-    A DataSource object is configured with a window-size that
-    specifies the maximum number of records to be returned in each
-    call to input(). See the input() documentation for more
-    information.
+    The get_results() method of a DataSource returns data as a
+    DataSet. A DataSet encapsulates on or more named data series. See
+    the DataSet class for more information.
 
-    The filter() method is used to define a set of conditions that
-    each record returned by input() must meet. These conditions are
-    specified as a set of logical expressions. See the filter() method
-    for more information.
     """
     def __init__(self):
-        self.window = 1024
-        self.col_width = 16
+        self.window = self.DEF_LIMIT
+        self.col_width = self.DEF_COL_WIDTH
         self.last_result = None
 
     def _get_arg(self, name, args, default=None, required=True):
@@ -147,35 +143,27 @@ class DataSource(object):
         return self.colnames.index(attr_name)
 
     def set_col_width(self, col_width):
+        """Set the width of columns output by the show() method"""
         self.col_width = col_width
 
     def get_col_width(self):
+        """Get the width of columns output by the show() method"""
         return self.col_width
 
     def set_window(self, window):
-        """Set the maximum number of records to return by each
-        call to input()."""
+        """Set the maximum size of a series returned in a DataSet"""
         self.window = window
 
     def get_window(self):
-        """Return the maximum number of records returned by each call
-        to input()"""
+        """Return the maximum size of a series returned in a DataSet"""
         return self.window
 
     def config(self, **kwargs):
+        """A generic interface to the sub-class's config() method"""
         raise NotImplementedError("The input_config method is not implemented")
 
     def select(self, attrs):
-        """Specify column specifications
-
-        Logically each element from the data source is a record
-        containing one or more named attributes. The
-        column-specification array specifies the order and attribute
-        name of each record to be returned.
-
-        If this function is not called, all columns/attributes in the
-        data source will be returned by input()
-        """
+        """A generic interface to the sub-class's select() method"""
         if self.fp is None:
             raise ValueError("The data source must be configured")
         self.columns = []
@@ -195,12 +183,32 @@ class DataSource(object):
             col_no += 1
 
     def get_columns(self):
+        """Return the array of column definitions"""
         return self.columns
 
     def query(self, inputer, reset=True):
         raise ValueError("query not implemented.")
 
     def show(self, limit=None, file=sys.stdout, reset=True):
+        """Output the data specified by the select() method
+
+        The data is output to the sys.stdout or can be overridden with
+        the 'file' keyword parameter. This is a utility function that
+        makes it easy for developers to test their select() arguments
+        and visually inspec the data returned.
+
+        Keyword Parameters:
+
+        limit -- Specifies the maximum number of rows to print. The
+                 default is DataSource.DEFAULT_LIMIT.
+
+        file  -- A Python FILE object to output data to. Default is
+                 sys.stdout.
+
+        reset -- Restart the query at 1st matching row.
+
+        """
+
         if limit is None:
             limit = self.window
         last_name = None
@@ -230,6 +238,7 @@ class DataSource(object):
         print("\n{0} record(s)".format(count), file=file)
 
     def get_results(self, limit=None, wait=None, reset=True, order='index', keep=0):
+
         """Return a DataSet from the DataSource
 
         The get_results() method returns the data identified by the
@@ -267,9 +276,9 @@ class DataSource(object):
         count = self.query(inp, reset=reset, wait=wait)
         result = inp.get_results()
         if keep:
-            last_row = len(self.last_result) - keep
+            last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
-                for col in range(0, len(result.series)):
+                for col in range(0, result.series_count):
                     result[col, row] = self.last_result[col, last_row]
                 last_row += 1
         self.last_result = result
@@ -277,8 +286,7 @@ class DataSource(object):
 
 class CsvDataSource(DataSource):
 
-        """Implements a CSV file analysis Transform data source.
-    """
+    """Implements a CSV file analysis Transform data source."""
     def __init__(self):
         DataSource.__init__(self)
         self.encoding = 'utf-8'
