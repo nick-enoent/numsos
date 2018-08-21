@@ -86,19 +86,37 @@ class CsvDataSink(DataSink):
     def config(self, **kwargs):
         """Configure the Transform input data source
 
+        If the 'path' argument is specified, it is used as the
+        DataSink output file. The file is created if it does not
+        already exist.  If the 'file' argument is specified, it refers
+        to a Python file descriptor. The 'path' and 'file' arguments
+        are mutually exclusive. If neither 'path' nor 'file' is
+        specified, output is written to sys.stdout.
+
         Keyword Arguments:
         path      - The path to the CSV file
+        file      - A Python file handle.
         schema    - The schema name for the objects (rows)
         encoding  - The text encoding of the file. The default is utf-8
         separator - The character separating columns in a CSV record,
                     the defualt is whitespace
+
         """
-        self.path = self._get_arg('path', kwargs)
+        self.path = self._get_arg('path', kwargs, required=False)
+        self.file = self._get_arg('file', kwargs, required=False)
         self.encoding = self._get_arg('encoding', kwargs, default='utf-8', required=False)
         self.separator = self._get_arg('separator', kwargs, default=',', required=False)
         self.header = self._get_arg('header', kwargs, default=True, required=False)
 
-        self.fp = open(self.path, "a")
+        if self.path and self.file:
+            raise ValueError("The 'path' and 'file' arguments are "
+                             "mutually exclusive.")
+
+        self.fp = sys.stdout
+        if self.path:
+            self.fp = open(self.path, "r+")
+        elif self.file:
+            self.fp = self.file
 
     def insert(self, columns, into=None):
         if into is None:
@@ -131,8 +149,30 @@ class CsvDataSink(DataSink):
             self.fp.write("\n")
 
 class SosDataSink(DataSink):
-    """Implements a SOS database analysis Transform data sink.
-    """
+    Metric_Columns = [
+            Sos.ColSpec("timestamp"),
+            Sos.ColSpec("component_id", cvt_fn=int),
+            Sos.ColSpec("job_id", cvt_fn=int),
+    ]
+    Metric_Attrs = [
+        { "name" : "timestamp",    "type" : "timestamp", "index" : {} },
+        { "name" : "component_id", "type" : "uint64",    "index" : {} },
+        { "name" : "job_id",       "type" : "uint64",    "index" : {} }
+    ]
+
+    Metric_Joins = [
+        { "name" : "comp_time", "type" : "join",
+          "join_attrs" : [ "component_id", "timestamp" ],
+          "index" : {} },
+        { "name" : "job_comp_time", "type" : "join",
+          "join_attrs" : [ "job_id", "component_id", "timestamp" ],
+          "index" : {} },
+        { "name" : "job_time_comp", "type" : "join",
+          "join_attrs" : [ "job_id", "timestamp", "component_id" ],
+          "index" : {} }
+    ]
+
+    """Implements a SOS database analysis Transform data sink."""
     def __init__(self):
         DataSink.__init__(self)
         self.cont = None
@@ -226,42 +266,6 @@ class SosDataSink(DataSink):
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
                 attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
 
-    def fixup_attrs(self, attrs):
-        reqd_attrs = [ { "name" : "timestamp",    "type" : "timestamp", "index" : {} },
-                       { "name" : "component_id", "type" : "uint64",    "index" : {} },
-                       { "name" : "job_id",       "type" : "uint64",    "index" : {} } ]
-        for i in range(0, len(reqd_attrs)):
-            present = False
-            for a in attrs:
-                if a['name'] == reqd_attrs[i]['name']:
-                    present = True
-                    break
-            if present:
-                continue
-            attrs.insert(i+1, reqd_attrs[i])
-
-        reqd_joins = [
-            { "name" : "comp_time", "type" : "join",
-              "join_attrs" : [ "component_id", "timestamp" ],
-              "index" : {} },
-            { "name" : "job_comp_time", "type" : "join",
-              "join_attrs" : [ "job_id", "component_id", "timestamp" ],
-              "index" : {} },
-            { "name" : "job_time_comp", "type" : "join",
-              "join_attrs" : [ "job_id", "timestamp", "component_id" ],
-              "index" : {} }
-        ]
-        for i in range(0, len(reqd_joins)):
-            present = False
-            for a in attrs:
-                if a['name'] == reqd_joins[i]['name']:
-                    present = True
-                    break
-            if present:
-                continue
-            attrs.append(reqd_joins[i])
-        return attrs
-
     def insert(self, columns, into=None):
         """Specifies the result data to be output
 
@@ -294,16 +298,17 @@ class SosDataSink(DataSink):
         DataSink.insert(self, columns)
         if into is None:
             raise ValueError("The 'into' keyword parameter is required.")
+
         if type(into) == str:
             self.schema = self.cont.schema_by_name(into)
             if self.schema is None:
                 raise ValueError("The schema {0} does not exist in the DataSink.".format(into))
         else:
             self.schema = self.cont.schema_by_name(into["schema"])
+
         if self.schema is None:
-            attrs = self.fixup_attrs(into['attrs'])
             schema = Sos.Schema()
-            schema.from_template(into['schema'], attrs)
+            schema.from_template(into['schema'], into['attrs'])
             schema.add(self.cont)
             self.schema = schema
 

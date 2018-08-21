@@ -321,22 +321,39 @@ class CsvDataSource(DataSource):
             self.fp.seek(0)
 
     def config(self, **kwargs):
-        """Configure the Transform input data source
+        """Configure the CSV DataSource
+
+        If the 'path' argument is specified, it is used as the
+        DataSource input.  If the 'file' argument is specified, it
+        refers to a Python file descriptor. The 'path' and 'file'
+        arguments are mutually exclusive. If neither 'path' nor 'file'
+        is specified, input is read from sys.stdin.
 
         Keyword Arguments:
         path      - The path to the CSV file
+        file      - A Python file handle.
         schema    - The schema name for the objects (rows)
         encoding  - The text encoding of the file. The default is utf-8
         separator - The character separating columns in a CSV record,
                     the defualt is whitespace
+
         """
         self.path = self._get_arg('path', kwargs)
+        self.file = self._get_arg('file', kwargs)
         self.encoding = self._get_arg('encoding', kwargs, required=False)
         self.separator = self._get_arg('separator', kwargs, default=',', required=False)
         self.schema_name = self._get_arg('schema', kwargs, required=True)
         self.schema = Csv.Schema(self.schema_name)
 
-        self.fp = open(self.path, "r")
+        if self.path and self.file:
+            raise ValueError("The 'path' and 'file' arguments are "
+                             "mutually exclusive.")
+
+        self.fp = sys.stdin
+        if self.path:
+            self.fp = open(self.path, "r")
+        elif self.file:
+            self.fp = self.file
         self.reset()
 
     def select(self, columns):
