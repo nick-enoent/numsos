@@ -16,9 +16,12 @@ def format_timestamp(d):
     return str(d)
 
 def wait_for_row_count(query, row, row_count, wait_arg):
+    print("row {0}, row_count {1}, row_target {2}".format(row, row_count, wait_arg['row_limit']))
     if row_count < wait_arg['row_limit']:
         time.sleep(wait_arg['wait_time'])
+        print("...returning True")
         return True
+    print("...returning False")
     return False
 
 if __name__ == "__main__":
@@ -32,7 +35,7 @@ if __name__ == "__main__":
 
     now = dt.datetime.now()
     now = int(now.strftime('%s')) - 60
-    comp_ids = [ comp for comp in range(10001, 10002) ]
+    comp_ids = [ comp for comp in range(10001, 10009) ]
 
     xfrms = []
     for comp_id in comp_ids:
@@ -92,9 +95,13 @@ if __name__ == "__main__":
     ]
 
 
-    waiter=( wait_for_row_count, { 'row_limit' : 10, 'wait_time' : 5 } )
+    HOUR = 3600
+    MINUTE = 60
+
+    wait_a_minute=( wait_for_row_count, { 'row_limit' : MINUTE, 'wait_time' : 10 } )
+    wait_a_couple=( wait_for_row_count, { 'row_limit' : 2, 'wait_time' : 2 } )
     for xfrm in xfrms:
-        xfrm.begin(count=10, wait=waiter)
+        xfrm.begin(count=HOUR, wait=wait_a_minute)
 
     run = True
     while run:
@@ -117,7 +124,7 @@ if __name__ == "__main__":
                            "component_id"
                          ],
                          # This skips the 1st row of the input
-                         rows = (1, series_size) 
+                         rows = (1, series_size)
                     )
 
             # Include the columns from the input in the output
@@ -135,5 +142,6 @@ if __name__ == "__main__":
 
             # We want the last sample of the previous batch to be the
             # 1st sample of the next batch, otherwise we'll skip a
-            # second on each batch.
-            xfrm.next(count=10, wait=waiter, keep=1)
+            # second on each batch. Also, we need at least 2 samples
+            # to compute a diff.
+            xfrm.next(count=HOUR, wait=wait_a_couple, keep=1)
