@@ -340,8 +340,21 @@ class DataSet(object):
         return new_set
 
     @property
+    def series_count(self):
+        """Return the number of series in the DataSet"""
+        return len(self.series_names)
+
+    @property
     def series(self):
-        # return a copy so the caller can modify it without affecting the set
+        """Return a copy of the series names
+
+        This method returns a copy of the series names so that they
+        can be manipulated by the caller without affecting the DataSet
+
+        Use series_count() to obtain the number of series instead of
+        len(series) to avoid unnecessarily copying data to obtain a
+        series count.
+        """
         return copy.copy(self.series_names)
 
 class ArrayDataSet(DataSet):
