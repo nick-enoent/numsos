@@ -272,7 +272,7 @@ class SosDataSink(DataSink):
         The 'into' keyword parameter is either a string specifying an
         existing schema name or a dictionary. If it is a string, the
         schema must alrady exist in the container, and the schema
-        defiition must be suitable to contain the output data
+        definition must be suitable to contain the output data
         specified in the column-specification list. If it is a
         dictionary, it must contain a 'schema' entry specifying the
         schema name, and an 'attrs' entry providing the
