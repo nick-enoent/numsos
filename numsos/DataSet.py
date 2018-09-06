@@ -485,10 +485,16 @@ class ArrayDataByIndex(ArrayDataSet):
 
     def __getitem__(self, idx):
         if type(idx) == int:
-            return self.array[0:self.get_series_size():,idx]
+            if self.array.ndim > 1:
+                return self.array[0:self.get_series_size():,idx]
+            else:
+                return self.array[0:self.get_series_size()]
         elif type(idx) == str:
             idx = self.series_names.index(idx)
-            return self.array[0:self.get_series_size():,idx]
+            if self.array.ndim > 1:
+                return self.array[0:self.get_series_size():,idx]
+            else:
+                return self.array[0:self.get_series_size()]
         elif type(idx) == tuple:
             ser = idx[0]
             row = idx[1]
