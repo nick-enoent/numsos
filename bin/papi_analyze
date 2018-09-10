@@ -1,0 +1,793 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+from numsos.DataSink import CsvDataSink, SosDataSink
+from numsos.Transform import Transform
+from numsos.DataSet import DataSet
+from numsos.Stack import Stack
+from numsos.ArgParse import ArgParse
+import textwrap
+import numpy as np
+import datetime as dt
+import time
+import argparse
+import sys
+
+
+def get_like_jobs(cont, args):
+    """Get job data for jobs like job_id"""
+    if args.job_id is None:
+        return None
+
+    src = SosDataSource()
+    src.config(cont=cont)
+    (start, end) = get_times_from_args(args)
+
+    src.select([ 'inst_data' ],
+               from_    = [ 'kokkos_app' ],
+               where    = [
+                     [ 'job_id', Sos.COND_EQ, args.job_id ],
+               ],
+               order_by = 'job_id',
+               unique   = True
+           )
+
+    res = src.get_results()
+    if res is None:
+        return None
+
+    jobData = SosDataSource()
+    jobData.config(cont=cont)
+
+    where = [
+        [ 'inst_data', Sos.COND_EQ, res['inst_data'][0] ]
+    ]
+
+    if start != 0:
+        where.append([ 'start_time', Sos.COND_GE, start ])
+
+    if end != 0:
+        where.append([ 'start_time', Sos.COND_LE, end ])
+
+    jobData.select([ 'job_id' ],
+                   from_    = [ 'kokkos_app' ],
+                   where    = where,
+                   order_by = 'inst_job_app_time',
+                   unique   = True
+               )
+    return jobData.get_results()
+
+def get_jobs(cont, args):
+    """Get job data"""
+    (start, end) = get_times_from_args(args)
+    src = SosDataSource()
+    src.config(cont=cont)
+    where = [
+              [ 'job_status', Sos.COND_EQ, 2 ]
+            ]
+
+    # Any time specification is ignored if job_id is specified
+    if start != 0 and args.job_id is None:
+        where.append([ 'job_start', Sos.COND_GE, start ])
+
+    if args.job_id is not None:
+        where.append([ 'job_id', Sos.COND_EQ, args.job_id ])
+
+    src.select([ 'job_id' ],
+               from_    = [ 'jobinfo' ],
+               where    = where,
+               order_by = 'timestamp'
+          )
+
+    xfrm = Transform(src, None, limit=4096)
+    res = xfrm.begin()
+    if res is None:
+        return None
+    xfrm.unique('job_id')
+    return xfrm.pop()
+
+def get_job(cont, job_id):
+    """Get job data"""
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'jobinfo.*' ],
+              from_    = [ 'jobinfo' ],
+              where    = [ [ 'job_id', Sos.COND_EQ, job_id ],
+                           [ 'job_status', Sos.COND_EQ, 2 ]
+                         ],
+              order_by = 'job_comp_time')
+    res = src.get_results()
+    if res is None:
+        return None
+    component_time = {}
+    node_id = 0
+    for row in range(0, res.series_size):
+        comp_id = int(res['component_id'][row])
+        component_time[comp_id] = ( int(res['job_end'][row]), node_id )
+        node_id += 1
+
+    return component_time
+
+event_name_map = {
+    "PAPI_TOT_INS" : "tot_ins",
+    "PAPI_TOT_CYC" : "tot_cyc",
+    "PAPI_LD_INS"  : "ld_ins",
+    "PAPI_SR_INS"  : "sr_ins",
+    "PAPI_BR_INS"  : "br_ins",
+    "PAPI_FP_OPS"  : "fp_ops",
+    "PAPI_L1_ICM"  : "l1_icm",
+    "PAPI_L1_DCM"  : "l1_dcm",
+    "PAPI_L2_ICA"  : "l2_ica",
+    "PAPI_L2_TCA"  : "l2_tca",
+    "PAPI_L2_TCM"  : "l2_tcm",
+    "PAPI_L3_TCA"  : "l3_tca",
+    "PAPI_L3_TCM"  : "l3_tcm"
+}
+
+def scale(v):
+    if v > 1.0e9:
+        v /= 1.0e9
+        s = "{0:12.4f} G".format(v)
+    elif v > 1.0e6:
+        v /= 1.0e6
+        s = "{0:12.4f} M".format(v)
+    elif v > 1.0e3:
+        v /= 1.0e3
+        s = "{0:12.4f} K".format(v)
+    else:
+        s = "{0:12.4f}  ".format(v)
+    return s
+
+nice_names = {
+    "job_id"       : "Job",
+    "rank"         : "Rank",
+    "tot_ins"      : "Total Instructions",
+    "tot_cyc"      : "Total Cycles",
+    "cpi"          : "Cycles Per Instruction",
+    "uopi"         : "Load/Stores Per Instruction",
+    "l1_miss_rate" : "L1 Miss Per Instruction",
+    "l1_miss_ratio": "L1 Miss Per Load/Store",
+    "l2_miss_rate" : "L2 Miss Per Instruction",
+    "l2_miss_ratio": "L2 Miss Per Load/Store",
+    "l3_miss_rate" : "L3 Miss Per Instruction",
+    "l3_miss_ratio": "L3 Miss Per Load/Store",
+    "l2_bw"        : "L2 Bandwidth",
+    "l3_bw"        : "L3 Bandwidth",
+    "fp_rate"      : "Floating Point Per Instruction",
+    "branch_rate"  : "Branches Per Instruction",
+    "load_rate"    : "Loads Per Instruction",
+    "store_rate"   : "Stores Per Instruction"
+}
+
+def job_str(jobs):
+    job_s = str(int(jobs[0]))
+    for job_id in jobs[1:]:
+        job_s += ', {0}'.format(str(int(job_id)))
+    return job_s
+
+def print_rank_metrics(jobs, job, args):
+    if args.csv:
+        print_rank_metrics_csv(jobs, job, args)
+        return
+    if args.verbose:
+        hdr = "\nPAPI Derived Metrics For Job {0}\n".format(job_str(jobs))
+    else:
+        hdr = "\nPAPI Derived Metrics for Job {0} Summarized by Rank\n".format(job_str(jobs))
+    print(hdr.center(80))
+    wrap = []
+    series_names = job.series
+    idx = series_names.index('timestamp')
+    del series_names[idx]
+    idx = series_names.index('job_id')
+    del series_names[idx]
+    idx = series_names.index('component_id')
+    del series_names[idx]
+    width = [ 5 ] + [ 14 for x in range(0, len(series_names)-1) ]
+    col_no = 0
+    for ser in series_names:
+        name = nice_names[ser]
+        wrap.append(textwrap.wrap(name, width[col_no]))
+        col_no += 1
+    max_len = 0
+    for col in wrap:
+        if len(col) > max_len:
+            max_len = len(col)
+    for r in range(0, max_len):
+        col_no = 0
+        for col in wrap:
+            skip = max_len - len(col)
+            if r < skip:
+                label = ""
+            else:
+                label = col[r - skip]
+            print("{0:<{width}}".format(label, width=width[col_no]), end=' ')
+            col_no += 1
+        print('')
+    col_no = 0
+    for ser in series_names:
+        print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
+        col_no += 1
+    print('')
+    row_count = 0
+    for row in range(0, job.series_size):
+        col_no = 0
+        for col in series_names:
+            if col_no == 0:
+                print("{0:{width}} ".format(int(job[col, row]),
+                                            width=width[col_no]), end='')
+            else:
+                print("{0:{width}} ".format(scale(job[col,row]),
+                                            width=width[col_no]), end='')
+            col_no += 1
+        print()
+        row_count += 1
+    col_no = 0
+    for ser in series_names:
+        print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
+        col_no += 1
+    print('')
+    print("{0} results\n".format(row_count))
+
+def print_rank_metrics_csv(job_list, job, args):
+    series_names = job.series
+    print("# job_id", end='')
+    for ser in series_names:
+        print(", {0}".format(ser), end='')
+    print('')
+    for row in range(0, job.series_size):
+        print("{0}".format(job_str(job_list)), end='')
+        for col in series_names:
+            print(", {0}".format(job[col,row]), end='')
+        print()
+
+def print_rank_stats(job_id, events, mins, maxs, stats, args):
+    if args.csv:
+        print_ranks_stats_csv(job_id, events, mins, maxs, stats, args)
+        return
+    hdr = "\nPAPI Summary of Job {0}\n".format(int(job_id))
+    print(hdr.center(80))
+    print("{0:24} {1:20} {2:20} {3:14} {4:14}"
+          .format("Metric Name", "Min/Rank", "Max/Rank", "Mean", "Standard Dev"))
+    print("{0:24} {1:20} {2:20} {3:14} {4:14}".format('-'.ljust(24, '-'),
+                                                      '-'.ljust(20, '-'),
+                                                      '-'.ljust(20, '-'),
+                                                      '-'.ljust(14, '-'),
+                                                      '-'.ljust(14, '-')))
+    for name in events:
+        min_val = scale(mins[name+'_min'][0])
+        min_rank = int(mins[name+'_min_rank'][0])
+        max_val = scale(maxs[name+'_max'][0])
+        max_rank = int(maxs[name+'_max_rank'][0])
+        mean_val = scale(stats[name+'_mean'][0])
+        std_val = scale(stats[name+'_std'][0])
+
+        print("{0:24} {1:18} {2:18} {3:14} {4:14}"
+              .format(name,
+                      "{0:14}[{1:4}]".format(min_val, min_rank),
+                      "{0:14}[{1:4}]".format(max_val, max_rank),
+                      mean_val, std_val))
+
+    print("{0:24} {1:20} {2:20} {3:14} {4:14}\n".format('-'.ljust(24, '-'),
+                                                      '-'.ljust(20, '-'),
+                                                      '-'.ljust(20, '-'),
+                                                      '-'.ljust(14, '-'),
+                                                      '-'.ljust(14, '-')))
+
+def print_rank_stats_csv(job_id, events, mins, maxs, stats, args):
+    print("# job_id, metric_name, min, min_rank, max, max_rank, mean, std")
+    for name in events:
+        min_val = mins[name+'_min'][0]
+        min_rank = mins[name+'_min_rank'][0]
+        max_val = maxs[name+'_max'][0]
+        max_rank = maxs[name+'_max_rank'][0]
+        mean_val = stats[name+'_mean'][0]
+        std_val = stats[name+'_std'][0]
+        print("{0}, {1}, {2}, {3}, {4}, {5}, {6}"
+              .format(job_id, name,
+                      min_val, min_rank,
+                      max_val, max_rank,
+                      mean_val, std_val))
+
+def print_job_stats(job_ids, events, mins, maxs, stats, args):
+    if args.csv:
+        print_ranks_stats_csv(job_id, events, mins, maxs, stats, args)
+        return
+    hdr = "\nPAPI Summary of Jobs {0}\n".format(job_str(job_ids))
+    print(hdr.center(80))
+    print("{0:24} {1:22} {2:22} {3:14} {4:14}"
+          .format("Metric Name", "Min/Job", "Max/Job", "Mean", "Standard Dev"))
+    print("{0:24} {1:22} {2:22} {3:14} {4:14}".format('-'.ljust(24, '-'),
+                                                      '-'.ljust(22, '-'),
+                                                      '-'.ljust(22, '-'),
+                                                      '-'.ljust(14, '-'),
+                                                      '-'.ljust(14, '-')))
+    for name in events:
+        min_val = scale(mins[name+'_min'][0])
+        min_rank = int(mins[name+'_min_job'][0])
+        max_val = scale(maxs[name+'_max'][0])
+        max_rank = int(maxs[name+'_max_job'][0])
+        mean_val = scale(stats[name+'_mean'][0])
+        std_val = scale(stats[name+'_std'][0])
+
+        print("{0:24} {1:20} {2:20} {3:14} {4:14}"
+              .format(name,
+                      "{0:14}[{1:6}]".format(min_val, min_rank),
+                      "{0:14}[{1:6}]".format(max_val, max_rank),
+                      mean_val, std_val))
+
+    print("{0:24} {1:22} {2:22} {3:14} {4:14}\n".format('-'.ljust(24, '-'),
+                                                      '-'.ljust(22, '-'),
+                                                      '-'.ljust(22, '-'),
+                                                      '-'.ljust(14, '-'),
+                                                      '-'.ljust(14, '-')))
+
+def print_job_metrics(jobs, job, args):
+    if args.csv:
+        print_job_metrics_csv(jobs, job, args)
+        return
+    if args.verbose:
+        hdr = "\nPAPI Derived Metrics Across Jobs {0}\n".format(job_str(jobs))
+    else:
+        hdr = "\nPAPI Derived Metrics for Jobs {0} Summarized by Rank\n".format(job_str(jobs))
+    print(hdr.center(80))
+    wrap = []
+    series_names = job.series
+    idx = series_names.index('timestamp')
+    del series_names[idx]
+    idx = series_names.index('component_id')
+    del series_names[idx]
+    width = [ 5 ] + [ 14 for x in range(0, len(series_names)-1) ]
+    col_no = 0
+    for ser in series_names:
+        name = nice_names[ser]
+        wrap.append(textwrap.wrap(name, width[col_no]))
+        col_no += 1
+    max_len = 0
+    for col in wrap:
+        if len(col) > max_len:
+            max_len = len(col)
+    for r in range(0, max_len):
+        col_no = 0
+        for col in wrap:
+            skip = max_len - len(col)
+            if r < skip:
+                label = ""
+            else:
+                label = col[r - skip]
+            print("{0:<{width}}".format(label, width=width[col_no]), end=' ')
+            col_no += 1
+        print('')
+    col_no = 0
+    for ser in series_names:
+        print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
+        col_no += 1
+    print('')
+    row_count = 0
+    for row in range(0, job.series_size):
+        col_no = 0
+        for col in series_names:
+            if col_no == 0:
+                print("{0:{width}} ".format(int(job[col, row]),
+                                            width=width[col_no]), end='')
+            else:
+                print("{0:{width}} ".format(scale(job[col,row]),
+                                            width=width[col_no]), end='')
+            col_no += 1
+        print()
+        row_count += 1
+    col_no = 0
+    for ser in series_names:
+        print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
+        col_no += 1
+    print('')
+    print("{0} results\n".format(row_count))
+
+def print_job_metrics_csv(job_list, job, args):
+    series_names = job.series
+    print("# job_id", end='')
+    for ser in series_names:
+        print(", {0}".format(ser), end='')
+    print('')
+    for row in range(0, job.series_size):
+        print("{0}".format(job_str(job_list)), end='')
+        for col in series_names:
+            print(", {0}".format(job[col,row]), end='')
+        print()
+
+def compute_derived_metrics(cont, job_id, trim=0.0):
+    """Compute derived PAPI Metrics for the specified job"""
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'papi-events.*' ],
+               from_    = [ 'papi-events' ],
+               where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
+                        ],
+               order_by = 'job_comp_time')
+
+
+    # For each job we need the job end time for each component in order
+    # to know when to stop accepting PAPI data for the component.
+    job_comp_end = get_job(cont, int(job_id))
+
+    xfrm = Transform(src, None, limit=4096)
+
+    run = True
+    res = src.get_results()
+    res = xfrm.begin(count=4096)
+    if res is None:
+        # Job was too short to record data
+        return (None, None)
+
+    while res is not None:
+        res = xfrm.next(count=4096)
+        if res is not None:
+            # concatenate TOP and TOP~1
+            xfrm.concat()
+
+    # result now on top of stack
+    result = xfrm.pop()                  # result on top
+
+    # Reformat the PAPI input such that there is one row for each 'pseudo-rank' in the job.
+    # An artificial node-id which is [ 1 ... node-count ] inclusive, and
+    # the cpu-id which is [0 ... cpu_count - 1]
+    # Then the rank is (node-id * cpu_count) + cpu-id
+    first = result.series.index('PAPI_TOT_INS')
+    event_names = result.series[first:]
+    cpu_count = int(result['PPN'][0])
+    components = result['component_id']
+
+    # nda is [ timestamp, component_id, job_id, rank, event_0, event_N ]
+    nda = np.ndarray([ result.series_size * cpu_count, 4 + len(event_names)])
+    outrow = 0
+    timestamps = result['timestamp']
+    last_comp = None
+    outcol = 4
+    for name in event_names:
+        series = result[name]
+        outrow = 0
+        for inrow in range(0, result.series_size):
+            comp_id = int(components[inrow])
+            comp = job_comp_end[comp_id]
+            if int(timestamps[inrow]) >= comp[0] - trim:
+                # Don't accept data from the component after the job has exited
+                continue
+            rank = comp[1] * cpu_count
+            for cpu in range(0, cpu_count):
+                nda[outrow,0] = timestamps[inrow]
+                nda[outrow,1] = comp_id
+                nda[outrow,2] = job_id
+                nda[outrow,3] =  rank + cpu              # pseudo-rank
+                nda[outrow,outcol] = series[inrow][cpu]
+                outrow += 1
+        outcol += 1
+    dataSet = DataSet()
+    dataSet.append(dataSet.new_set(DataSet.NUMERIC_DATA, len(nda),
+                                   [ 'timestamp', 'component_id', 'job_id', 'rank' ] +
+                                   event_names, nda))
+    dataSet.set_series_size(outrow)
+
+    # "Normalize" the event names
+    for name in event_names:
+        dataSet.rename(name, event_name_map[name])
+
+    xfrm.push(dataSet)
+    series = xfrm.top().series
+    idx = series.index('component_id')
+    del series[idx]
+    idx = series.index('rank')
+    del series[idx]
+    idx = series.index('job_id')
+    del series[idx]
+    xfrm.diff(series, group_name = 'rank', xfrm_suffix='_rate',
+              keep=[ 'timestamp', 'component_id', 'job_id', 'rank' ])
+    rates = xfrm.top()
+
+    # Rename timestamp_rate to bin_width
+    rates.rename('timestamp_rate', 'bin_width')
+    # Strip the rate off the other series names
+    for name in rates.series:
+        if "_rate" in name:
+            rates.rename(name, name.replace("_rate", ""))
+
+    # Normalize the input by dividing by the bin width, i.e diff(timestamp)
+    series = rates.series
+    idx = series.index('timestamp')
+    del series[idx]
+    idx = series.index('bin_width')
+    del series[idx]
+    idx = series.index('rank')
+    del series[idx]
+    idx = series.index('component_id')
+    del series[idx]
+    idx = series.index('job_id')
+    del series[idx]
+    res = DataSet()
+    for ser in series:
+        xfrm.dup()
+        xfrm['/']([ ser, 'bin_width' ], result=ser)
+        res.append(xfrm.pop())
+
+    job = DataSet()
+    job.append(rates,
+               series=[ 'timestamp', 'job_id',
+                        'component_id', 'rank' ])
+    job.append(res, series=[ 'tot_ins' ])
+
+    # cpi = tot_cyc / tot_ins
+    xfrm.dup()
+    xfrm['/']([ 'tot_cyc', 'tot_ins' ],  result='cpi')
+    job.append(xfrm.pop())
+
+    # uopi = (ld_ins + sr_ins) / tot_ins
+    xfrm.dup()
+    xfrm['+']([ 'ld_ins', 'sr_ins' ], result='mem_acc')
+    xfrm.append(source=xfrm.pick(1), series=['tot_ins'])
+    xfrm['/']([ 'mem_acc', 'tot_ins' ], result='uopi')
+    job.append(xfrm.pop())
+
+    # l1_miss_rate = (l1_icm + l1_dcm) / tot_ins
+    xfrm.dup()
+    xfrm['+']([ 'l1_icm', 'l1_dcm' ], result='l1_tcm')
+    xfrm.append(source=xfrm.pick(1), series=['tot_ins'])
+    l1_tcm = xfrm.top()
+    xfrm['/']([ 'l1_tcm', 'tot_ins' ], result='l1_miss_rate')
+    job.append(xfrm.pop())
+
+    # l1_miss_ratio = (l1_icm + l1_dcm) / (ld_ins + sr_ins)
+    xfrm.dup()
+    xfrm['+']([ 'ld_ins', 'sr_ins' ], result='mem_acc')
+    mem_acc = xfrm.top()
+    xfrm.append(source=l1_tcm)
+    xfrm['/']([ 'l1_tcm', 'mem_acc' ], result='l1_miss_ratio')
+    job.append(xfrm.pop())
+
+    # l2_miss_rate = l2_tcm / tot_ins
+    xfrm.dup()
+    xfrm['/']([ 'l2_tcm', 'tot_ins' ], result='l2_miss_rate')
+    job.append(xfrm.pop())
+
+    # l2_miss_ratio = l2_tcm / mem_acc
+    xfrm.dup()
+    xfrm.append(source=mem_acc)
+    xfrm['/']([ 'l2_tcm', 'mem_acc' ], result='l2_miss_ratio')
+    job.append(xfrm.pop())
+
+    # l3_miss_rate = l3_tcm / tot_ins
+    xfrm.dup()
+    xfrm['/']([ 'l3_tcm', 'tot_ins' ], result='l3_miss_rate')
+    job.append(xfrm.pop())
+
+    # l3_miss_ratio = l3_tcm / mem_acc
+    xfrm.dup()
+    xfrm.append(source=mem_acc)
+    xfrm['/']([ 'l3_tcm', 'mem_acc' ], result='l3_miss_ratio')
+    job.append(xfrm.pop())
+
+    # l2_bandwidth = l2_tca * 64e-6
+    xfrm.dup()
+    xfrm['*']([ 64e-6, 'l2_tca' ], result='l2_bw')
+    job.append(xfrm.pop())
+
+    # l3_bandwidth = (l3_tca) * 64e-6
+    xfrm.dup()
+    xfrm['*']([ 64e-6, 'l3_tca' ], result='l3_bw')
+    job.append(xfrm.pop())
+
+    # floating_point
+    xfrm.dup()
+    xfrm['/']([ 'fp_ops', 'tot_ins' ], result='fp_rate')
+    job.append(xfrm.pop())
+
+    # branch
+    xfrm.dup()
+    xfrm['/']([ 'br_ins', 'tot_ins' ], result='branch_rate')
+    job.append(xfrm.pop())
+
+    # load
+    xfrm.dup()
+    xfrm['/']([ 'ld_ins', 'tot_ins' ], result='load_rate')
+    job.append(xfrm.pop())
+
+    # store
+    xfrm['/']([ 'sr_ins', 'tot_ins' ], result='store_rate')
+    job.append(xfrm.pop())
+
+    return (xfrm, job)
+
+def compute_job_metrics(xfrm, metrics):
+    xfrm.push(metrics)
+    idx = metrics.series.index('tot_ins')
+    series = metrics.series[idx:]
+    xfrm.mean(series, group_name='job_id',
+              keep=metrics.series[0:idx-1], xfrm_suffix='')
+    return xfrm, xfrm.pop()
+
+def compute_rank_metrics(xfrm, metrics):
+    xfrm.push(metrics)
+    idx = metrics.series.index('tot_ins')
+    series = metrics.series[idx:]
+    xfrm.mean(series, group_name='rank',
+              keep=metrics.series[0:idx-1], xfrm_suffix='')
+    return xfrm, xfrm.pop()
+
+def compute_rank_stats(xfrm, job):
+    """Summarize PAPI events across ranks for a job"""
+
+    stats = DataSet()
+    xfrm.push(job)
+    events = job.series
+    idx = events.index('rank')
+    events = events[idx+1:]
+
+    # compute the rank containing the minima for each event
+    mins = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.min([ name ], group_name='rank')
+        xfrm.minrow(name+'_min')
+        xfrm.top().rename('rank', name + '_min_rank')
+        mins.append(xfrm.pop())
+
+    # compute the rank containing the maxima for each event
+    maxs = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.max([ name ], group_name='rank')
+        xfrm.maxrow(name+'_max')
+        xfrm.top().rename('rank', name + '_max_rank')
+        maxs.append(xfrm.pop())
+
+    # compute the standard deviation
+    xfrm.dup()
+    xfrm.std(events)
+    stats.append(xfrm.pop())
+
+    # mean
+    xfrm.mean(events)
+    stats.append(xfrm.pop())
+
+    return (events, mins, maxs, stats)
+
+def compute_job_stats(xfrm, job):
+    """Summarize PAPI events across jobs"""
+
+    stats = DataSet()
+    xfrm.push(job)
+    events = job.series
+    idx = events.index('tot_ins')
+    events = events[idx:]
+
+    # compute the job containing the minima for each event
+    mins = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.min([ name ], group_name='job_id')
+        xfrm.minrow(name+'_min')
+        xfrm.top().rename('job_id', name + '_min_job')
+        mins.append(xfrm.pop())
+
+    # compute the rank containing the maxima for each event
+    maxs = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.max([ name ], group_name='job_id')
+        xfrm.maxrow(name+'_max')
+        xfrm.top().rename('job_id', name + '_max_job')
+        maxs.append(xfrm.pop())
+
+    # compute the standard deviation
+    xfrm.dup()
+    xfrm.std(events)
+    stats.append(xfrm.pop())
+
+    # mean
+    xfrm.mean(events)
+    stats.append(xfrm.pop())
+
+    return (events, mins, maxs, stats)
+
+def compute_like_job_stats(xfrm, jobs):
+    """Get PAPI across jobs"""
+
+    stats = DataSet()
+    xfrm.push(jobs)
+    events = jobs.series
+    idx = events.index('rank')
+    events = events[idx+1:]
+
+    # compute the rank containing the minima for each event
+    mins = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.min([ name ])
+        xfrm.minrow(name+'_min')
+        xfrm.top().rename('rank', name + '_min_rank')
+        mins.append(xfrm.pop())
+
+    # compute the rank containing the maxima for each event
+    maxs = DataSet()
+    for name in events:
+        xfrm.dup()
+        xfrm.max([ name ], group_name='rank')
+        xfrm.maxrow(name+'_max')
+        xfrm.top().rename('rank', name + '_max_rank')
+        maxs.append(xfrm.pop())
+
+    # compute the standard deviation
+    xfrm.dup()
+    xfrm.std(events)
+    stats.append(xfrm.pop())
+
+    # mean
+    xfrm.dup()
+    xfrm.mean(events)
+    stats.append(xfrm.pop())
+
+    return (events, mins, maxs, stats)
+
+def get_times_from_args(args):
+    if args.begin:
+        start = int(args.begin.strftime("%s"))
+    else:
+        start = 0
+    if args.end:
+        end = int(args.end.strftime("%s"))
+    else:
+        end = 0
+    return (start, end)
+
+if __name__ == "__main__":
+    parser = ArgParse(description="Compute PAPI derived metrics")
+    parser.add_argument("--job_id", required=False,
+                        help="Show only this job's data")
+    parser.add_argument("--like", required=False, action="store_true",
+                        help="Show jobs with the same Kokkos app string as JOB_ID")
+    parser.add_argument("--summary", required=False, action="store_true",
+                        help="Summarize PAPI derived metrics")
+    parser.add_argument("--outliers", required=False, type=float,
+                        help="Show statistical outliers.")
+    parser.add_argument("--trim", required=False, type=float, default=1.0,
+                        help="Ignore TRIM seconds of data at the end of each job.")
+    parser.add_argument("--csv", required=False, action="store_true",
+                        help="Output the data in CSV format.")
+    args = parser.parse_args()
+
+    cont = Sos.Container(args.path)
+    if args.like:
+        job_list = get_like_jobs(cont, args)
+    else:
+        job_list = get_jobs(cont, args)
+
+    if job_list is None:
+        print("There were no jobs found with the specified criteria.")
+        sys.exit(0)
+
+    if not args.like:
+        for job_id in job_list[0]:
+            xfrm, metrics = compute_derived_metrics(cont, job_id, args.trim)
+            if args.summary:
+                (events, mins, maxs, stats) = compute_rank_stats(xfrm, metrics)
+                print_rank_stats(job_id, events, mins, maxs, stats, args)
+            else:
+                xfrm, ranks = compute_rank_metrics(xfrm, metrics)
+                print_rank_metrics([ job_id ], ranks, args)
+            if args.verbose:
+                print_rank_metrics([ job_id ], metrics)
+    else:
+        xfrm, metrics = compute_derived_metrics(cont, job_list[0,0], args.trim)
+        xfrm.push(metrics)
+        for job_id in job_list[0][1:]:
+            xx, metrics = compute_derived_metrics(cont, job_id, args.trim)
+            if metrics == None:
+                continue
+            xfrm.concat(source=metrics)
+        metrics = xfrm.pop()
+        if args.summary:
+            (events, mins, maxs, stats) = compute_job_stats(xfrm, metrics)
+            print_job_stats(job_list[0].tolist(), events, mins, maxs, stats, args)
+        else:
+            xfrm, byjob = compute_job_metrics(xfrm, metrics)
+            print_job_metrics(job_list[0].tolist(), byjob, args)
+        if args.verbose:
+            print_rank_metrics(job_list[0].tolist(), metrics)
