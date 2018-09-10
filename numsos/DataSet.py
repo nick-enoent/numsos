@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 from __future__ import print_function
 import numpy as np
 import datetime as dt
@@ -68,6 +68,14 @@ class DataSet(object):
         else:
             self.order = self.ATTR_ORDER
 
+    def copy(self, my_ser, my_offset, src_set, src_ser, src_offset, count):
+        dst = self.set_with_series_name(my_ser)
+        src = src_set.set_with_series_name(my_ser)
+        dst.copy(my_ser, my_offset, src, src_ser, src_offset, count)
+
+    def series_idx(self, name):
+        return self.series_names.index(name)
+
     def rename(self, oldname, newname):
         """Rename a series
 
@@ -110,21 +118,57 @@ class DataSet(object):
     def get_series_count(self):
         return len(self.series_names)
 
-    def concat(self, aset):
+    def concat(self, aset, series_list=None):
         """Concatenate a set to the DataSet
 
-        Add a the new sets data to the end of this set
+        Add the new sets data to the end of this set
 
         Positional Parameters:
         -- The DataSet to get the data from
 
         """
+        if series_list is None:
+            series_list = aset.series
+
+        # Build arrays of sets of the same type
+        sets_with_type = {}
+        for s in aset.sets:
+            if type(s) in sets_with_type:
+                sets_with_type[type(s)].append(s)
+            else:
+                sets_with_type[type(s)] = [ s ]
+
+        # Build arrays of series with the same type
+        series_with_type = {}
+        for ser in series_list:
+            s = self.set_with_series_name[ser]
+            if type(s) in series_with_type:
+                series_with_type[type(s)].append(ser)
+            else:
+                series_with_type[type(s)] = [ ser ]
+
+        # Create the set list for the new DataSet
         newds = DataSet()
-        for i in range(0, len(self.sets)):
-            a = self.sets[i]
-            b = aset.sets[i]
-            c = a.concat(b)
-            newds.append(c)
+        row_count = self.series_size + aset.series_size
+        for typ in series_with_type:
+            series_names = series_with_type[typ]
+            array = sets_with_type[typ][0].alloc(row_count, len(series_names))
+            s = typ(row_count, series_names, array)
+            newds.append(s)
+        newds.set_series_size(row_count)
+
+        # Copy the data from self
+        for ser in series_list:
+            dst = newds.set_with_series_name[ser]
+            src = self.set_with_series_name[ser]
+            dst.copy(ser, 0, src, ser, 0, src.series_size)
+
+        # copy the data from aset
+        for ser in series_list:
+            dst = newds.set_with_series_name[ser]
+            src = aset.set_with_series_name[ser]
+            dst.copy(ser, self.series_size, src, ser, 0, aset.series_size)
+
         return newds
 
     def append(self, aset, series=None):
@@ -188,7 +232,8 @@ class DataSet(object):
                                      self.get_series_size(),
                                      aset.get_series_size()))
 
-        self.sets.append(aset)
+        if aset not in self.sets:
+            self.sets.append(aset)
         self.series_names += series_names
         for ser in series_names:
             if ser not in aset.series:
@@ -315,7 +360,7 @@ class DataSet(object):
         else:
             raise ValueError("{0} is an invalid data_type".format(data_type))
 
-    def new(self, series_names=None):
+    def new(self, series_list=None):
         new_set = DataSet()
         if series_names is None:
             sets = []
@@ -389,6 +434,9 @@ class ArrayDataSet(DataSet):
         self.array = array
         self.data_type = self.NUMERIC_DATA
 
+    def alloc(self, row_count, ser_count):
+        raise ValueError("Not implemented")
+
     def rename(self, oldname, newname):
         if newname in self.series_names:
             raise ValueError("The series name {0} already exists.".format(newname))
@@ -397,7 +445,7 @@ class ArrayDataSet(DataSet):
         idx = self.series_names.index(oldname)
         self.series_names[idx] = newname
 
-    def new(self, series_names=None):
+    def new(self, series_list=None):
         """Returns an instance that duplicates the meta-data of this set
 
         Positional Arguments:
@@ -447,7 +495,18 @@ class ArrayDataByIndex(ArrayDataSet):
         """Create an ArrayData instance that stores data as an ndarray ordered by index"""
         ArrayDataSet.__init__(self, row_count, series_names, array, self.INDEX_ORDER)
 
-    def new(self, series_names=None, series_size=None):
+    def alloc(self, row_count, series_count):
+        """Allocate data suffient to store [row_count][series_count] items"""
+        return np.ndarray([ row_count, series_count])
+
+    def copy(self, my_ser, my_offset, src_set, src_ser, src_offset, count):
+        """Copy series data from another set"""
+        dst_idx = self.series_names.index(my_ser)
+        src_idx = src_set.series_names.index(src_ser)
+        self.array[my_offset:my_offset+count,dst_idx] \
+            = src_set.array[src_offset:src_offset+count,src_idx]
+
+    def new(self, series_list=None, series_size=None):
         """Returns an instance that duplicates the meta-data of this set
 
         Positional Arguments:
@@ -457,12 +516,12 @@ class ArrayDataByIndex(ArrayDataSet):
 
         """
 
-        if series_names is None:
-            series_names = self.series_names
+        if series_list is None:
+            series_list = self.series_names
             ser_count = len(self.series_names)
         else:
             ser_count = 0
-            for t in series_names:
+            for t in series_list:
                 if t in self.series_names:
                     ser_count += 1
                 else:
@@ -473,13 +532,22 @@ class ArrayDataByIndex(ArrayDataSet):
         shape = [ series_size, ser_count ]
         nda = np.ndarray(shape)
 
-        return ArrayDataByIndex(self.series_size, series_names, nda)
+        return ArrayDataByIndex(self.series_size, series_list, nda)
 
-    def concat(self, aset):
+    def concat(self, aset, series_list=None):
+        if series_list is None:
+            series_list = self.series
+
         series_size = self.get_series_size() + aset.get_series_size()
-        res = self.new(series_size=series_size)
-        res[0:self.get_series_size()] = self.array[:self.get_series_size()]
-        res[self.get_series_size():] = aset.array[:aset.get_series_size()]
+        res = self.new(series_size=series_size, series_list=series_list)
+
+        dst_col = 0
+        for ser in series_list:
+            src_col = self.series_names.index(ser)
+            res.array[0:self.get_series_size(), dst_col] = self.array[:self.get_series_size(), src_col]
+            src_col = aset.series_names.index(ser)
+            res.array[self.get_series_size():,dst_col] = aset.array[:aset.get_series_size(), src_col]
+            dst_col += 1
         res.set_series_size(series_size)
         return res
 
@@ -534,7 +602,11 @@ class ArrayDataByColumn(ArrayDataSet):
     def __init__(self, row_count, series_names, array, order='index'):
         raise ValueError("Unsupported")
 
-    def new(self, series_names=None):
+    def alloc(self, row_count, series_count):
+        """Allocate data suffient to store [row_count][series_count] items"""
+        return np.ndarray([ series_count, row_count])
+
+    def new(self, series_list=None):
         pass
 
     def __getitem__(self, idx):
@@ -555,7 +627,11 @@ class ListDataSet(DataSet):
         self.alist = alist
         self.data_type = self.LIST_DATA
 
-    def new(self, series_names=None):
+    def alloc(self, row_count, series_count):
+        """Allocate data suffient to store [row_count][series_count] items"""
+        raise ValueError("Unsupported")
+
+    def new(self, series_list=None):
         """Returns an instance that duplicates the meta-data of this set
 
         The returned set will have the same series_names and initialized
@@ -607,7 +683,23 @@ class ListDataByIndex(ListDataSet):
     def __init__(self, row_count, series_names, alist):
         ListDataSet.__init__(self, row_count, series_names, alist, self.INDEX_ORDER)
 
-    def new(self, series_names=None, series_size=None):
+    def alloc(self, row_count, series_count):
+        """Allocate data suffient to store [row_count][series_count] items"""
+        alist = []
+        if series_size is None:
+            series_size = 0
+        for row in range(0, series_count):
+            new_row = []
+            for col in range(0, row_count):
+                new_row.append([])
+            alist.append(new_row)
+        return alist
+
+    def copy(self, dst_ser, dst_offset, src_set, src_ser, src_offset, count):
+        """Copy series data from another set"""
+        pass
+
+    def new(self, series_list=None, series_size=None):
         """Returns an instance that duplicates the meta-data of this set
 
         The returned set will have the same series_names and initialized
@@ -620,18 +712,15 @@ class ListDataByIndex(ListDataSet):
 
         if series_names is None:
             series_names = self.series_names
-        idx = [ self.series_names.index(ser) for ser in series_names ]
-        alist = []
+
         if series_size is None:
-            series_size = 0
-        for row in range(0, series_size):
-            new_row = []
-            for col in range(0, len(idx)):
-                new_row.append([])
-            alist.append(new_row)
+            series_size = self.series_size
+
+        alist = self.alloc(series_size, len(series_names))
         return ListDataByIndex(len(alist), series_names, alist)
 
-    def concat(self, aset):
+    def concat(self, aset, series_list=None):
+        # TODO: series_list support
         series_size = self.get_series_size() + aset.get_series_size()
         res = self.new(series_size=series_size)
 
