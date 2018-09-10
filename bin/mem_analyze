@@ -1,0 +1,150 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+from numsos.DataSink import CsvDataSink, SosDataSink
+from numsos.Transform import Transform
+from numsos.DataSet import DataSet
+from numsos.Stack import Stack
+from numsos.ArgParse import ArgParse
+import numpy as np
+import datetime as dt
+import time
+import argparse
+import sys
+
+def do_job(cont, job_id):
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'meminfo.*' ],
+               from_    = [ 'meminfo' ],
+               where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
+                        ],
+               order_by = 'job_comp_time')
+    xfrm = Transform(src, None, limit=4096)
+
+    run = True
+
+    res = xfrm.begin(count=1024)
+    if res is None:
+        # Job was too short to record data
+        return
+
+    while res is not None:
+        res = xfrm.next(count=1024)
+        if res is not None:
+            # concatenate TOP and TOP~1
+            xfrm.concat()
+
+    # result now on top of stack
+    result = xfrm.top()                  # result on top
+
+    # compute the difference of MemFree and MemUsed
+    xfrm.push(result)
+    xfrm['-']([ 'MemTotal', 'MemFree' ]) # MemTotal - MemFree on top
+
+    # append MemTotal to the result
+    xfrm.append(series=[ 'MemTotal' ], source=result)
+
+    # compute the ratio of the MemFree - MemUsed / MemTotal
+    xfrm['/']([ 'MemTotal-MemFree', 'MemTotal' ], result="Mem_Used_Ratio")
+    series = xfrm.top().series           # Has the value "Mem_Used_Ratio"
+    mem_used_ratio = xfrm.append(series=[ 'component_id' ], source=result)
+
+    # compute the standard deviation
+    xfrm.std(series)
+
+    # compute the mean
+    xfrm.push(mem_used_ratio)
+    xfrm.mean(series)
+
+    # compute the min memory used
+    xfrm.push(mem_used_ratio)
+    xfrm.min(series, group_name='component_id')
+    xfrm.minrow('Mem_Used_Ratio_min')
+    xfrm.top().rename('component_id', 'Min_Mem_Nid')
+
+    # compute the max memory used
+    xfrm.push(mem_used_ratio)
+    xfrm.max(series, group_name='component_id')
+    xfrm.maxrow('Mem_Used_Ratio_max')
+    xfrm.top().rename('component_id', 'Max_Mem_Nid')
+
+    # combine the results
+    xfrm.append([ 'Min_Mem_Nid', 'Mem_Used_Ratio_min' ])
+    xfrm.append([ 'Mem_Used_Ratio_mean' ])
+    xfrm.append([ 'Mem_Used_Ratio_std' ])
+
+    # compute the start and job duration
+    xfrm.push(result)
+    xfrm.min([ 'timestamp' ])
+    xfrm.top().rename('timestamp_min', 'start_time')
+    xfrm.dup()
+    xfrm.push(result)
+    xfrm.max([ 'timestamp' ])
+    xfrm.top().rename('timestamp_max', 'end_time')
+    xfrm.append()
+    xfrm['-']([ 'end_time', 'start_time' ], result='Duration')
+
+    # append the start and end job times
+    xfrm.swap(), xfrm.append(), xfrm.append()
+
+    # finally the job id
+    xfrm.extract([ 'job_id' ], source=result)
+    xfrm.top().set_series_size(1) # Make it the same size as the result
+    xfrm.append()
+    return xfrm.pop()
+
+def get_jobs(cont, args):
+    (start, end) = get_times_from_args(args)
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'jobinfo.*' ],
+              from_    = [ 'jobinfo' ],
+              where    = [ [ 'job_start', Sos.COND_GE, start ],
+                           [ 'job_status', Sos.COND_EQ, 2 ]
+                         ],
+              order_by = 'job_comp_time')
+    xfrm = Transform(src, None, limit=4096)
+    res = xfrm.begin()
+    if res is None:
+        return None
+    xfrm.unique('job_id')
+    return xfrm.top()
+
+def get_times_from_args(args):
+    if args.begin:
+        start = int(args.begin.strftime("%s"))
+    else:
+        start = 0
+    if args.end:
+        end = int(args.end.strftime("%s"))
+    else:
+        end = 0
+    return (start, end)
+
+if __name__ == "__main__":
+    parser = ArgParse(description="Compute memory summary statistics for a job")
+    args = parser.parse_args()
+
+    cont = Sos.Container(args.path)
+    jobs = get_jobs(cont, args)
+    if jobs is None:
+        print("There were no jobs in the specified time period.")
+        sys.exit(0)
+
+    xfrm = Transform(None, None)
+    res = None
+    j = jobs[0]
+    for i in range(0, len(j)):
+        res = do_job(cont, j[i])
+        if res:
+            i += 1
+            break
+    if res:
+        xfrm.push(res)
+        for job_id in j[i:]:
+            res = do_job(cont, job_id)
+            if res:
+                xfrm.concat(source=res)
+        xfrm.top().show(width=20)
