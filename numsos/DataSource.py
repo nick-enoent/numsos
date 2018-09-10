@@ -502,7 +502,7 @@ class SosDataSource(DataSource):
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
                 attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
 
-    def select(self, columns, where=None, order_by=None, from_=None):
+    def select(self, columns, where=None, order_by=None, from_=None, unique=False):
         """Specify which columns, order, and record selection criteria
 
         Positional Parameters:
@@ -512,6 +512,8 @@ class SosDataSource(DataSource):
         from_     -- An array of schema name being queried (default is all)
         where     -- An array of query conditions
         order_by  -- The name of the attribute by which to order results
+        unique    -- Return only a single result for each matching
+                     the where condition
 
         The 'attr' keyword parameter is an array of attribute
         (i.e. column) names to include in the record.  The 'schema'
@@ -537,7 +539,7 @@ class SosDataSource(DataSource):
                      )
         """
         self.query_ = Sos.Query(self.cont)
-        self.query_.select(columns, where=where, from_ = from_, order_by = order_by)
+        self.query_.select(columns, where=where, from_ = from_, order_by = order_by, unique = unique)
 
         col_no = 0
         self.colnames = []
