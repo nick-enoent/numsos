@@ -208,7 +208,9 @@ class Transform(object):
                 that are to be retained in the output.
 
         """
-        series_names = [ group_name ] + keep + [ ser + xfrm_suffix for ser in series_list ]
+        if group_name not in keep:
+            keep.insert(0, group_name)
+        series_names = keep + [ ser + xfrm_suffix for ser in series_list ]
         inp = self.stack.pop()
 
         # compute the unique values in the group_by series
@@ -231,7 +233,7 @@ class Transform(object):
         # copy the group and keep data to the result
         start_row = 0
         for value in uniq:
-            for col in range(0, len(keep) + 1):
+            for col in range(0, len(keep)):
                 src = inp[series_names[col]]
                 grp_src = src[grp == value]
                 grp_dst = res[col]
@@ -239,7 +241,7 @@ class Transform(object):
                 res_len = grp_len[value]
                 grp_dst[start_row:start_row+res_len] = grp_src[0:res_len]
 
-        col = len(keep) + 1
+        col = len(keep)
         for ser in series_list:
             src = inp[ser]
             for value in uniq:
