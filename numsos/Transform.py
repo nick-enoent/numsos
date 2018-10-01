@@ -77,56 +77,6 @@ class Transform(object):
         result.append(res)
         return self.stack.push(result)
 
-    def group(self, series_list, group_fn, count=None):
-        """Filter a DataSet with a group function
-
-        Pop the top of stack the return each row for which the
-        group_fn function returns True
-
-        If count is specified, it is the name of a series that will be
-        inserted into the output that is the count of rows matching
-        each group.
-
-        The result pushed to the stack will contain N rows where N is
-        the number of times the group_fn function returned True.
-
-        Positional Parameters:
-        -- An array of series names
-        -- A function that returns True if the row starts a new group.
-
-        """
-        inp = self.stack.pop()
-        result = inp.new(series_list)
-
-        # create an index that given a column # in the output returns
-        # a column # in the input
-        idx = [ inp.series.index(seq) for seq in series_list ]
-
-        if count:
-            cnt = inp.new_set(DataSet.NUMERIC_DATA, inp.get_series_size(), [ count ])
-
-        # seed the group_fn state so it knows when it's the 1st row
-        self.group_data = None
-
-        res_row = -1
-        data_row = 0
-        for i in range(0, inp.get_series_size()):
-            if group_fn(self, inp, data_row):
-                res_row += 1
-                for out_col in range(0, len(idx)):
-                    result[out_col, res_row] = inp[idx[out_col], data_row]
-                if count:
-                    cnt[0, res_row] = 1.0
-                data_row += 1
-            else:
-                if count:
-                    cnt[0, res_row] += 1.0
-                data_row += 1
-        if count:
-            result.append(cnt)
-        result.set_series_size(res_row)
-        return self.stack.push(result)
-
     def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=[]):
         """Compute the difference of a series
 
@@ -195,7 +145,14 @@ class Transform(object):
         """Group data by a series value
 
         The transform function is performed over each group of data
-        where the value of a particular series are equal.
+        where the values in the group_name series are equal.
+
+        The 'keep' list names the series that are to be copied
+        (unmodified) to the result. If the series in the keep list are
+        not of the same type as the series in the series_list or
+        cannot be cast to that type, a new array of the appropriate
+        type is allocated. This should be considered (for efficiency)
+        when performing a sequence of computations.
 
         Positional Parameters:
         -- An array of series names
@@ -210,7 +167,8 @@ class Transform(object):
         """
         if group_name not in keep:
             keep.insert(0, group_name)
-        series_names = keep + [ ser + xfrm_suffix for ser in series_list ]
+        dst_names = keep + [ ser + xfrm_suffix for ser in series_list ]
+        src_names = keep + [ ser for ser in series_list ]
         inp = self.stack.pop()
 
         # compute the unique values in the group_by series
@@ -228,25 +186,40 @@ class Transform(object):
             res_size += grp_len[value]
 
         # allocate the result
-        res = inp.new_set(DataSet.NUMERIC_DATA, res_size, series_names)
+        # res = inp.new_set(DataSet.NUMERIC_DATA, res_size, series_names)
+        # Allocate the result arrays.
+        res = {}
+        for col in range(0, len(dst_names)):
+            ser = src_names[col]
+            src = inp[ser]
+            typ = type(src[0])
+            if typ == np.string_:
+                typ = np.dtype('|S256')
+            dst_name = dst_names[col]
+            data = np.ndarray(src.shape, dtype=typ)
+            res[dst_name] = inp.new_set(DataSet.NUMERIC_DATA,
+                                        inp.series_size, [ dst_name ],
+                                        data=data)
 
-        # copy the group and keep data to the result
+        # copy the group and keep data to the result. src_names and
+        # dst_names are the same for keep columns
         start_row = 0
         for value in uniq:
             for col in range(0, len(keep)):
-                src = inp[series_names[col]]
+                name = keep[col]
+                src = inp[name]
                 grp_src = src[grp == value]
-                grp_dst = res[col]
+                grp_dst = res[name]
                 start_row = grp_start[value]
                 res_len = grp_len[value]
                 grp_dst[start_row:start_row+res_len] = grp_src[0:res_len]
 
-        col = len(keep)
-        for ser in series_list:
-            src = inp[ser]
+        ser_col = len(keep)
+        for col in range(ser_col, ser_col + len(series_list)):
+            src = inp[src_names[col]]
             for value in uniq:
                 grp_src = src[grp == value]
-                grp_dst = res[col]
+                grp_dst = res[dst_names[col]]
                 start_row = grp_start[value]
                 res_len = grp_len[value]
                 if xfrm_fn_args is None:
@@ -254,8 +227,12 @@ class Transform(object):
                 else:
                     grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src, xfrm_fn_args)
             col += 1
-        res.set_series_size(res_size)
-        return res
+        result = DataSet()
+        for col in range(0, len(dst_names)):
+            name = dst_names[col]
+            result.append(res[name])
+        result.set_series_size(res_size)
+        return result
 
     def histogram(self, series_list, xfrm_suffix="_hist",
                   bins=10, range=None, weights=None, density=None):
@@ -362,10 +339,12 @@ class Transform(object):
     def minrow(self, series):
         """Return the row with the minimum value in the series_list
 
-        The result returned will have a single row containing the minimum value in the series specified.
+        The result returned will have a single row containing the
+        minimum value in the series specified.
 
         Positional Parameters:
         -- The name of the series
+
         """
         inp = self.stack.pop()
         res = inp.new_set(DataSet.NUMERIC_DATA, 1, inp.series)
@@ -547,16 +526,17 @@ class Transform(object):
         result -- The name of the output series
         """
         if result is None:
-            series_name = series_list[0]
+            series_name = str(series_list[0])
             for series in series_list[1:]:
-                series_name += '*' + series
+                series_name += '*' + str(series)
         else:
             series_name = result
 
         inp = self.stack.pop()
         res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
 
-        if type(series_list[0]) == float:
+        typ = type(series_list[0])
+        if typ == float or typ == int:
             res[0] = series_list[0]
         else:
             res[0] = inp[series_list[0]]
@@ -584,16 +564,20 @@ class Transform(object):
                as divide by zero.
         """
         if result is None:
-            series_name = series_list[0]
+            series_name = str(series_list[0])
             for series in series_list[1:]:
-                series_name += '/' + series
+                series_name += '/' + str(series)
         else:
             series_name = result
 
         inp = self.stack.pop()
         res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
 
-        res[0] = inp[series_list[0]]
+        typ = type(series_list[0])
+        if typ == float or typ == int:
+            res[0] = series_list[0]
+        else:
+            res[0] = inp[series_list[0]]
         for series in series_list[1:]:
             with np.errstate(divide='ignore'):
                 res[0] /= inp[series]
@@ -604,7 +588,7 @@ class Transform(object):
         return self.stack.push(result)
 
     def append(self, series=None, source=None):
-        """Append DataSet series on the stack
+        """Append series
 
         Append series from TOP-1 to TOP and push the result. If the
         source keyword is specified, the DataSet is source instead of
@@ -629,7 +613,7 @@ class Transform(object):
     def extract(self, series_list, rename=None, source=None, rows=None):
         """Extract series from a DataSet
 
-        The result contains a the series from the first argument
+        The result contains the series from the first argument
         optionally renamed as defined by the rename keyword parameter.
 
         The rename keyword must be None or the same length as the
