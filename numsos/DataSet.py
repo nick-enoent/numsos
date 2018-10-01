@@ -171,6 +171,14 @@ class DataSet(object):
 
         return newds
 
+    def append_array(self, series_size, series_names, array):
+        """Append a numpy array to a DataSet"""
+        if self.order == self.INDEX_ORDER:
+            aset = ArrayDataByIndex(series_size, series_names, array)
+        else:
+            aset = ArrayDataByColumn(series_size, series_names, array)
+        return self.append(aset)
+
     def append(self, aset, series=None):
         """Append a set to the DataSet
 
@@ -248,6 +256,37 @@ class DataSet(object):
 
         return True
 
+    def tolist(self):
+        """Return a JSon encode-able representaiton of this dataset.
+
+        Numpy datatypes are not directly encodable in JSon. This
+        function returns a Python list of lists containing Python
+        types that will work with json.dumps()
+
+        np.intXX types are int(x)
+        np.floatXX types become float(x)
+        np.array types become str(x)
+        """
+        aSet = []
+        for row_no in range(0, self.series_size):
+            aRow = []
+            for col in range(0, self.series_count):
+                v = self[col, row_no]
+                typ = type(v)
+                if typ == np.ndarray or typ == np.string_:
+                    v = str(v)
+                elif typ == np.float32 or typ == np.float64:
+                    v = float(v)
+                elif typ == np.int64 or typ == np.uint64:
+                    v = int(v)
+                elif typ == np.int32 or typ == np.uint32:
+                    v = int(v)
+                elif typ == np.int16 or typ == np.uint16:
+                    v = int(v)
+                aRow.append(v)
+            aSet.append(aRow)
+        return aSet
+
     def __getitem__(self, idx):
         if type(idx) == str:
             s = self.set_with_series_name[idx]
@@ -268,7 +307,8 @@ class DataSet(object):
 
     def __setitem__(self, idx, value):
         if type(idx) == str:
-            s = self.set_with_series_name[idx][idx]
+            # s = self.set_with_series_name[idx][idx]
+            s = self.set_with_series_name[idx]
             s[idx] = value
         elif type(idx) == int:
             s = self.set_with_ser_idx[idx]
@@ -582,7 +622,10 @@ class ArrayDataByIndex(ArrayDataSet):
             self.array[0:self.get_series_size():,idx] = value
         elif type(idx) == str:
             idx = self.series_names.index(idx)
-            self.array[0:self.get_series_size():,idx] = value
+            if self.array.ndim > 1:
+                self.array[0:self.get_series_size():,idx] = value
+            else:
+                self.array[0:self.get_series_size()] = value
         elif type(idx) == tuple:
             ser = idx[0]
             row = idx[1]
