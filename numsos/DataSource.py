@@ -26,31 +26,70 @@ class TableInputer(object):
             return False
         return True
 
+def group_cols_by_type(cols):
+    """Group together the columns in the record by their type"""
+    groups = {}
+    for typ in Sos.sos_type_strs:
+        if typ == Sos.TYPE_TIMESTAMP or type == Sos.TYPE_STRUCT:
+            continue
+        for col in cols:
+            col_type = col.attr_type
+            if col_type == Sos.TYPE_TIMESTAMP:
+                col_type = Sos.TYPE_UINT64
+            if col_type == Sos.TYPE_STRUCT:
+                col_type = Sos.TYPE_BYTE_ARRAY
+            if col_type == typ:
+                if typ in groups:
+                    groups[typ].append(col)
+                else:
+                    groups[typ] = [ col ]
+    return groups
+
 class ResultByIndexInputer(object):
+    DEF_ARRAY_LIMIT = 256
     def __init__(self, query, limit, start=0):
         self.row_count = start
         self.limit = limit
+        self.array_limit = self.DEF_ARRAY_LIMIT
         self.query = query
-        self.listcols = []
-        self.arraycols = []
-        for col in self.query.get_columns():
-            if col.attr_type <= Sos.TYPE_TIMESTAMP:
-                self.arraycols.append(col.col_name)
+        self.dataset = DataSet.DataSet()
+        type_groups = group_cols_by_type(self.query.get_columns())
+        for typ in type_groups:
+            cols = type_groups[typ]
+            typ_str = Sos.sos_type_strs[typ].lower()
+            if typ >= Sos.TYPE_IS_ARRAY:
+                if typ == Sos.TYPE_STRUCT:
+                    typ_str = 'uint8'
+                else:
+                    typ_str = typ_str.replace('_array', '')
+                if typ == Sos.TYPE_STRING:
+                    data = np.zeros([ self.limit, len(cols) ],
+                                    dtype=np.dtype('|S{0}'.format(self.DEF_ARRAY_LIMIT)))
+                else:
+                    data = np.zeros([ self.limit, len(cols), self.array_limit],
+                                    dtype=np.dtype(typ_str))
             else:
-                self.listcols.append(col.col_name)
-        self.ndarray = np.zeros([ self.limit, len(self.arraycols) ])
-        self.alist = []
+                data = np.zeros([ self.limit, len(cols) ], dtype=np.dtype(typ_str))
+            series = [ col.col_name for col in cols ]
+            self.dataset.append(DataSet.ArrayDataByIndex(self.limit, series, data))
 
     def input(self, row):
-        col_no = 0
-        row = []
         for col in self.query.get_columns():
-            if col.attr_type <= Sos.TYPE_TIMESTAMP:
-                self.ndarray[ self.row_count ][ col_no ] = col.float_value
-                col_no += 1
+            col_no = self.dataset.series_idx(col.col_name)
+            s = self.dataset.set_with_series_name[col.col_name]
+            s_idx = self.dataset.set_col_map[col_no]
+            # print("{0:12} {1:12}".format(self.row_count, s_idx), "{0:12} = {1}".format(col.col_name, col.value))
+            if col.is_array or col.attr_type == Sos.TYPE_STRUCT:
+                if col.attr_type != Sos.TYPE_STRING:
+                    a = col.value
+                    s.array[self.row_count,s_idx,:len(a)] = a
+                else:
+                    s.array[self.row_count,s_idx] = col.value
+            elif col.attr_type != Sos.TYPE_TIMESTAMP:
+                s.array[self.row_count,s_idx] = col.value
             else:
-                row.append(col.value)
-        self.alist.append(row)
+                # force timestamp to a float
+                s.array[self.row_count,s_idx] = col.float_value
         self.row_count += 1
         if self.row_count == self.limit:
             return False
@@ -59,13 +98,8 @@ class ResultByIndexInputer(object):
     def get_results(self):
         if self.row_count == 0:
             return None
-        result = DataSet.DataSet()
-        result.append(DataSet.ArrayDataByIndex(self.row_count,
-                                        self.arraycols, self.ndarray))
-        if len(self.alist) > 0:
-            result.append(DataSet.ListDataByIndex(self.row_count,
-                                                  self.listcols, self.alist))
-        return result
+        self.dataset.set_series_size(self.row_count)
+        return self.dataset
 
 class ResultByColumnInputer(object):
     def __init__(self, query, limit, start=0):
