@@ -30,7 +30,6 @@ def get_like_jobs(cont, args):
                      [ 'job_id', Sos.COND_EQ, args.job_id ],
                ],
                order_by = 'job_id',
-               unique   = True
            )
 
     res = src.get_results()
@@ -54,7 +53,7 @@ def get_like_jobs(cont, args):
                    from_    = [ 'kokkos_app' ],
                    where    = where,
                    order_by = 'inst_job_app_time',
-                   unique   = True
+                   unique = True
                )
     return jobData.get_results()
 
@@ -104,8 +103,9 @@ def get_job(cont, job_id):
     node_id = 0
     for row in range(0, res.series_size):
         comp_id = int(res['component_id'][row])
-        component_time[comp_id] = ( int(res['job_end'][row]), node_id )
-        node_id += 1
+        if comp_id not in component_time:
+            component_time[comp_id] = ( int(res['job_end'][row]), node_id )
+            node_id += 1
 
     return component_time
 
@@ -395,8 +395,9 @@ def print_job_metrics_csv(job_list, job, args):
             print(", {0}".format(job[col,row]), end='')
         print()
 
-def compute_derived_metrics(cont, job_id, trim=0.0):
+def compute_derived_metrics(cont, job_id, args):
     """Compute derived PAPI Metrics for the specified job"""
+    trim=args.trim
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'papi-events.*' ],
@@ -413,7 +414,6 @@ def compute_derived_metrics(cont, job_id, trim=0.0):
     xfrm = Transform(src, None, limit=4096)
 
     run = True
-    res = src.get_results()
     res = xfrm.begin(count=4096)
     if res is None:
         # Job was too short to record data
@@ -448,6 +448,9 @@ def compute_derived_metrics(cont, job_id, trim=0.0):
         outrow = 0
         for inrow in range(0, result.series_size):
             comp_id = int(components[inrow])
+            if comp_id not in job_comp_end:
+                # Some components may have not completed (i.e. jobinfo state ! = 2)
+                continue
             comp = job_comp_end[comp_id]
             if int(timestamps[inrow]) >= comp[0] - trim:
                 # Don't accept data from the component after the job has exited
@@ -457,7 +460,7 @@ def compute_derived_metrics(cont, job_id, trim=0.0):
                 nda[outrow,0] = timestamps[inrow]
                 nda[outrow,1] = comp_id
                 nda[outrow,2] = job_id
-                nda[outrow,3] =  rank + cpu              # pseudo-rank
+                nda[outrow,3] = rank + cpu              # pseudo-rank
                 nda[outrow,outcol] = series[inrow][cpu]
                 outrow += 1
         outcol += 1
@@ -471,15 +474,12 @@ def compute_derived_metrics(cont, job_id, trim=0.0):
     for name in event_names:
         dataSet.rename(name, event_name_map[name])
 
+    derived_names = [ "tot_ins", "tot_cyc", "ld_ins", "sr_ins", "br_ins",
+                      "fp_ops", "l1_icm", "l1_dcm", "l2_ica", "l2_tca",
+                      "l2_tcm", "l3_tca", "l3_tcm" ]
+
     xfrm.push(dataSet)
-    series = xfrm.top().series
-    idx = series.index('component_id')
-    del series[idx]
-    idx = series.index('rank')
-    del series[idx]
-    idx = series.index('job_id')
-    del series[idx]
-    xfrm.diff(series, group_name = 'rank', xfrm_suffix='_rate',
+    xfrm.diff([ 'timestamp'] + derived_names, group_name = 'rank', xfrm_suffix='_rate',
               keep=[ 'timestamp', 'component_id', 'job_id', 'rank' ])
     rates = xfrm.top()
 
@@ -491,19 +491,8 @@ def compute_derived_metrics(cont, job_id, trim=0.0):
             rates.rename(name, name.replace("_rate", ""))
 
     # Normalize the input by dividing by the bin width, i.e diff(timestamp)
-    series = rates.series
-    idx = series.index('timestamp')
-    del series[idx]
-    idx = series.index('bin_width')
-    del series[idx]
-    idx = series.index('rank')
-    del series[idx]
-    idx = series.index('component_id')
-    del series[idx]
-    idx = series.index('job_id')
-    del series[idx]
     res = DataSet()
-    for ser in series:
+    for ser in derived_names:
         xfrm.dup()
         xfrm['/']([ ser, 'bin_width' ], result=ser)
         res.append(xfrm.pop())
@@ -765,7 +754,9 @@ if __name__ == "__main__":
 
     if not args.like:
         for job_id in job_list[0]:
-            xfrm, metrics = compute_derived_metrics(cont, job_id, args.trim)
+            xfrm, metrics = compute_derived_metrics(cont, job_id, args)
+            if metrics is None:
+                continue
             if args.summary:
                 (events, mins, maxs, stats) = compute_rank_stats(xfrm, metrics)
                 print_rank_stats(job_id, events, mins, maxs, stats, args)
@@ -773,12 +764,12 @@ if __name__ == "__main__":
                 xfrm, ranks = compute_rank_metrics(xfrm, metrics)
                 print_rank_metrics([ job_id ], ranks, args)
             if args.verbose:
-                print_rank_metrics([ job_id ], metrics)
+                print_rank_metrics([ job_id ], metrics, args)
     else:
-        xfrm, metrics = compute_derived_metrics(cont, job_list[0,0], args.trim)
+        xfrm, metrics = compute_derived_metrics(cont, job_list[0,0], args)
         xfrm.push(metrics)
         for job_id in job_list[0][1:]:
-            xx, metrics = compute_derived_metrics(cont, job_id, args.trim)
+            xx, metrics = compute_derived_metrics(cont, job_id, args)
             if metrics == None:
                 continue
             xfrm.concat(source=metrics)
@@ -790,4 +781,4 @@ if __name__ == "__main__":
             xfrm, byjob = compute_job_metrics(xfrm, metrics)
             print_job_metrics(job_list[0].tolist(), byjob, args)
         if args.verbose:
-            print_rank_metrics(job_list[0].tolist(), metrics)
+            print_rank_metrics(job_list[0].tolist(), metrics, args)
