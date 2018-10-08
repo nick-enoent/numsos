@@ -192,7 +192,7 @@ class Transform(object):
         for col in range(0, len(dst_names)):
             ser = src_names[col]
             src = inp[ser]
-            typ = type(src[0])
+            typ = src[0].dtype
             if typ == np.string_:
                 typ = np.dtype('|S256')
             dst_name = dst_names[col]

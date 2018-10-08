@@ -14,6 +14,7 @@ OPTION_DOC
 
 OPTION_DEFAULT_DISABLE([debug], [ENABLE_DEBUG])
 OPTION_DEFAULT_ENABLE([python], [ENABLE_PYTHON])
+OPTION_WITH_OR_BUILD([sos],[../sos],[sos/src sos/include ods/src ods/include])
 
 AM_PATH_PYTHON(,,[:])
 NUMPY_INCLUDE_PATH=$($PYTHON -c "import numpy; print(numpy.get_include())")

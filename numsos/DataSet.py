@@ -283,6 +283,8 @@ class DataSet(object):
                     v = int(v)
                 elif typ == np.int16 or typ == np.uint16:
                     v = int(v)
+                elif typ == np.datetime64:
+                    v = v.astype('int') / 1000 # convert to milliseconds from microseconds
                 aRow.append(v)
             aSet.append(aRow)
         return aSet
@@ -631,7 +633,10 @@ class ArrayDataByIndex(ArrayDataSet):
             row = idx[1]
             if type(ser) == str:
                 ser = self.series_names.index(ser)
-            self.array[row][ser] = value
+            if self.array.ndim > 1:
+                self.array[row,ser] = value
+            else:
+                self.array[row] = value
         elif type(idx) == slice:
             self.array[idx] = value
         else:

@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy as np
 from sosdb import Sos
 from numsos import DataSet, Csv
+from numsos import Inputer
 import datetime as dt
 import time
 import os
@@ -44,6 +45,69 @@ def group_cols_by_type(cols):
                 else:
                     groups[typ] = [ col ]
     return groups
+
+class DebugInputer(object):
+    DEF_ARRAY_LIMIT = 256
+    def __init__(self, query, limit, start=0):
+        self.start = start
+        self.row_count = start
+        self.limit = limit
+        self.array_limit = self.DEF_ARRAY_LIMIT
+        self.query = query
+        self.dataset = DataSet.DataSet()
+        for col in self.query.get_columns():
+            typ = col.attr_type
+            if typ == Sos.TYPE_TIMESTAMP:
+                typ_str = 'datetime64[us]'
+            elif typ == Sos.TYPE_STRUCT:
+                typ_str = 'uint8'
+            else:
+                typ_str = Sos.sos_type_strs[typ].lower()
+                typ_str = typ_str.replace('_array', '')
+
+            if typ >= Sos.TYPE_IS_ARRAY:
+                if typ == Sos.TYPE_STRING:
+                    data = np.zeros([ self.limit ],
+                                    dtype=np.dtype('|S{0}'.format(self.DEF_ARRAY_LIMIT)))
+                else:
+                    data = np.zeros([ self.limit, self.array_limit],
+                                    dtype=np.dtype(typ_str))
+            else:
+                data = np.zeros([ self.limit ], dtype=np.dtype(typ_str))
+            col.set_data(data)
+            self.dataset.append(DataSet.ArrayDataByIndex(self.limit, [ col.col_name ], data))
+        self.reset(start=start)
+
+    def reset(self, start=0):
+        if start:
+            self.row_count = start
+        else:
+            self.row_count = self.start
+
+    def input(self, row):
+        for col in self.query.get_columns():
+            typ = col.attr_type
+            a = col.value
+            array = col.get_data()
+            if col.is_array or typ == Sos.TYPE_STRUCT:
+                if typ != Sos.TYPE_STRING:
+                    array[self.row_count,:len(a)] = a
+                else:
+                    array[self.row_count] = a
+            elif typ == Sos.TYPE_TIMESTAMP:
+                array[self.row_count] = (a[0] * 1000000) + a[1]
+            else:
+                array[self.row_count] = a
+        self.row_count += 1
+        if self.row_count == self.limit:
+            return False
+        return True
+
+    def get_results(self):
+        if self.row_count == 0:
+            return None
+        self.dataset.set_series_size(self.row_count)
+        return self.dataset
 
 class ResultByIndexInputer(object):
     DEF_ARRAY_LIMIT = 256
@@ -216,6 +280,12 @@ class DataSource(object):
             self.columns.append(c)
             col_no += 1
 
+    def col_by_name(self, name):
+        for col in self.columns:
+            if name == col.col_name:
+                return col
+        return None
+
     def get_columns(self):
         """Return the array of column definitions"""
         return self.columns
@@ -271,7 +341,8 @@ class DataSource(object):
                   end=' ', file=file)
         print("\n{0} record(s)".format(count), file=file)
 
-    def get_results(self, limit=None, wait=None, reset=True, order='index', keep=0):
+    def get_results(self, limit=None, wait=None, reset=True, order='index', keep=0,
+                    inputer=None):
 
         """Return a DataSet from the DataSource
 
@@ -301,10 +372,14 @@ class DataSource(object):
         """
         if limit is None:
             limit = self.window
-        if order == 'index':
-            inp = ResultByIndexInputer(self, limit, start=keep)
+        if inputer is None:
+            if order == 'index':
+                # inp = ResultByIndexInputer(self, limit, start=keep)
+                inp = Inputer.Default(self, limit, start=keep)
+            else:
+                inp = ResultByColumnInputer(self, limit, start=keep)
         else:
-            inp = ResultByColumnInputer(self, limit, start=keep)
+            inp = inputer
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
         count = self.query(inp, reset=reset, wait=wait)
@@ -580,6 +655,9 @@ class SosDataSource(DataSource):
         for col in self.query_.get_columns():
             self.colnames.append(col.attr_name)
             col_no += 1
+
+    def col_by_name(self, name):
+        return self.query_.col_by_name(name)
 
     def query(self, inputer, reset=True, wait=None):
         if self.query_:

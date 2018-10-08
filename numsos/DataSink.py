@@ -247,10 +247,13 @@ class SosDataSink(DataSink):
             print("The schema {0} does not exist in this DataSink.")
             return None
 
-        print("{0:32} {1:8} {2:12} {3:8} {4}".format("Name", "Id", "Type", "Indexed", "Info"))
+        print("{0:32} {1:8} {2:12} {3:8} {4}".format("Name", "Id", "Type", "Indexed",
+                                                     "Info"))
         print("{0:32} {1:8} {2:12} {3:8} {4}".format('-'.ljust(32, '-'),
-                                                      '-'.ljust(8, '-'), '-'.ljust(12, '-'),
-                                                      '-'.ljust(8, '-'), '-'.ljust(32, '-')))
+                                                     '-'.ljust(8, '-'),
+                                                     '-'.ljust(12, '-'),
+                                                     '-'.ljust(8, '-'),
+                                                     '-'.ljust(32, '-')))
         for attr in schema.attr_iter():
             info = None
             if attr.type() == Sos.TYPE_JOIN:
@@ -264,7 +267,17 @@ class SosDataSink(DataSink):
             else:
                 info = ''
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
-                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+                attr.name(), attr.attr_id(), attr.type_name(),
+                str(attr.is_indexed()), info))
+
+    def add_schema(self, name, template):
+        sch = Sos.Schema()
+        sch.from_template(name, template)
+        sch.add(self.cont)
+
+    def get_schema(self, name):
+        """Return Schema object if present in DataSink"""
+        return self.cont.schema_by_name(name)
 
     def insert(self, columns, into=None):
         """Specifies the result data to be output
@@ -321,6 +334,8 @@ class SosDataSink(DataSink):
             self.initialize = False
         self.results = results
         for self.row_no in range(0, results.get_series_size()):
+            # If the object exists, use it, if not, allocate a new object
+            obj = self.get_object(results
             obj = self.schema.alloc()
             for col in self.columns:
                 obj[col.attr_id] = col.value
