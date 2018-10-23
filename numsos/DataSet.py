@@ -130,31 +130,18 @@ class DataSet(object):
         if series_list is None:
             series_list = aset.series
 
-        # Build arrays of sets of the same type
-        sets_with_type = {}
-        for s in aset.sets:
-            if type(s) in sets_with_type:
-                sets_with_type[type(s)].append(s)
-            else:
-                sets_with_type[type(s)] = [ s ]
-
-        # Build arrays of series with the same type
-        series_with_type = {}
-        for ser in series_list:
-            s = self.set_with_series_name[ser]
-            if type(s) in series_with_type:
-                series_with_type[type(s)].append(ser)
-            else:
-                series_with_type[type(s)] = [ ser ]
-
-        # Create the set list for the new DataSet
+        # Create the new DataSet
         newds = DataSet()
         row_count = self.series_size + aset.series_size
-        for typ in series_with_type:
-            series_names = series_with_type[typ]
-            array = sets_with_type[typ][0].alloc(row_count, len(series_names))
-            s = typ(row_count, series_names, array)
-            newds.append(s)
+        for ser in series_list:
+            s = self.set_with_series_name[ser]
+            shape = s.array.shape
+            if len(shape) > 1:
+                # strings
+                array = np.zeros([ row_count ] + shape[1:], dtype=s.array.dtype)
+            else:
+                array = np.zeros([ row_count ], dtype=s.array.dtype)
+            newds.append_array(row_count, [ ser ], array)
         newds.set_series_size(row_count)
 
         # Copy the data from self
@@ -545,8 +532,20 @@ class ArrayDataByIndex(ArrayDataSet):
         """Copy series data from another set"""
         dst_idx = self.series_names.index(my_ser)
         src_idx = src_set.series_names.index(src_ser)
-        self.array[my_offset:my_offset+count,dst_idx] \
-            = src_set.array[src_offset:src_offset+count,src_idx]
+        if self.array.ndim > 1:
+            if src_set.array.ndim > 1:
+                self.array[my_offset:my_offset+count,dst_idx] \
+                    = src_set.array[src_offset:src_offset+count,src_idx]
+            else:
+                self.array[my_offset:my_offset+count,dst_idx] \
+                    = src_set.array[src_offset:src_offset+count]
+        else:
+            if src_set.array.ndim > 1:
+                self.array[my_offset:my_offset+count] \
+                    = src_set.array[src_offset:src_offset+count,src_idx]
+            else:
+                self.array[my_offset:my_offset+count] \
+                    = src_set.array[src_offset:src_offset+count]
 
     def new(self, series_list=None, series_size=None):
         """Returns an instance that duplicates the meta-data of this set
