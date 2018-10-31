@@ -420,8 +420,11 @@ class CsvDataSource(DataSource):
             line = line[cnt+1:]
             row = line.split(',')
             self.colnames = []
+            idx = 0
             for col in row:
                 self.colnames.append(col.strip())
+                self.schema.add_attr(Csv.Attr(self.schema, col, idx, Sos.TYPE_DOUBLE))
+                idx += 1
         else:
             line = line.split(self.separator)
             self.colnames = []
@@ -447,8 +450,8 @@ class CsvDataSource(DataSource):
                     the defualt is whitespace
 
         """
-        self.path = self._get_arg('path', kwargs)
-        self.file = self._get_arg('file', kwargs)
+        self.path = self._get_arg('path', kwargs, required=False)
+        self.file = self._get_arg('file', kwargs, required=False)
         self.encoding = self._get_arg('encoding', kwargs, required=False)
         self.separator = self._get_arg('separator', kwargs, default=',', required=False)
         self.schema_name = self._get_arg('schema', kwargs, required=True)
@@ -465,42 +468,82 @@ class CsvDataSource(DataSource):
             self.fp = self.file
         self.reset()
 
+    def show_tables(self):
+        """Show all the schema available in the DataSource"""
+        self.show_schemas()
+
+    def show_schemas(self):
+        """Show all the schema available in the DataSource"""
+        s = self.schema
+        col_len = len(s.name()) + 2
+
+        print("{0:{width}} {1:12} {2}".format("Name", "Id", "Attr Count", width=col_len))
+        print("{0:{width}} {1:12} {2:12}".format('-'.ljust(col_len, '-'), '-'.ljust(12, '-'),
+                                                 '-'.ljust(12, '-'), width=col_len))
+        print("{0:{width}} {1:12} {2:12}".format(s.name(), s.schema_id(), s.attr_count(),
+                                                 width=col_len))
+
+    def show_table(self, name):
+        """Show a schema definition
+
+        See show_schema().
+        """
+        self.show_schema(name)
+
+    def show_schema(self, name):
+        """Show the definition of a schema
+
+        Positional Parameters:
+        -- The schema name
+        """
+        if self.schema.name() == name:
+            schema = self.schema
+        else:
+            schema = None
+        if schema is None:
+            print("The schema {0} does not exist in this DataSource.")
+            return None
+
+        print("{0:32} {1:8} {2:12} {3:8} {4}".format("Name", "Id", "Type", "Indexed", "Info"))
+        print("{0:32} {1:8} {2:12} {3:8} {4}".format('-'.ljust(32, '-'),
+                                                      '-'.ljust(8, '-'), '-'.ljust(12, '-'),
+                                                      '-'.ljust(8, '-'), '-'.ljust(32, '-')))
+        for attr in schema.attrs:
+            info = None
+            print("{0:32} {1:8} {2:12} {3:8} {4}".format(
+                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+
     def select(self, columns):
         """Specify which columns from the CSV appear in a record
 
-        The attrs argument is an array of column-specifications. A
-        column-specification is either a string or a list. If
-        column-specification is a list, is consists of a
-        column-identifer, and a column-converter. If it is not a list,
-        it is a column-identifier.
+        The attrs argument is an array of column-specifications.  The
+        column-identifier is a string, an integer or a ColSpec()
+        class.
 
-        The column-identifier is a string or an integer. If it is a
-        string, it refers to column number X in a CSV line where
-        column numbers begin at 0. If it is a string, it is the name
-        of a column and the CSV file MUST contain a header comment
-        beginning with the character '#' that enumerates the names of
-        each column in the file separated by commas.
+        If it is a string, it is either the wild-card '*' or a name
+        that must appear in the column header. The wild card '*' means
+        all columns in the file.
 
-        The column-converter is a type conversion function that will
-        be used to convert the CSV column text to a value in the
-        record. If the column-converter is not specified, the builtin
-        Python function float() will be used.
+        If it is an integer, it refers to the N-th column in the CSV
+        file beginning with column number 0.
+
+        If it is a ColSpec() class, please refer to the ColSpec() help
+        for more information.
 
         Positional Parameters:
         - An array of column-specifications
 
         Example:
 
-        ds.select([
+            ds.select([
                        'timestamp',
                        ColSpec('component_id', cvt_fn=int)
                        ColSpec('MemFree'),
-                  ]
-                 )
+                      ])
 
         """
         self.reset()
-        if columns is None:
+        if columns is None or columns[0] == '*':
             columns = self.colnames
         DataSource.select(self, columns)
         for c in self.columns:
@@ -569,10 +612,17 @@ class SosDataSource(DataSource):
 
     def show_schemas(self):
         """Show all the schema available in the DataSource"""
-        print("{0:32} {1:12} {2}".format("Name", "Id", "Attr Count"))
-        print("{0:32} {1:12} {2:12}".format('-'.ljust(32, '-'), '-'.ljust(12, '-'), '-'.ljust(12, '-')))
+        col_len = 6
         for s in self.cont.schema_iter():
-            print("{0:32} {1:12} {2:12}".format(s.name(), s.schema_id(), s.attr_count()))
+            l = len(s.name())
+            if l > col_len:
+                col_len = l
+        print("{0:{width}} {1:12} {2}".format("Name", "Id", "Attr Count", width=col_len))
+        print("{0:{width}} {1:12} {2:12}".format('-'.ljust(col_len, '-'), '-'.ljust(12, '-'),
+                                                 '-'.ljust(12, '-'), width=col_len))
+        for s in self.cont.schema_iter():
+            print("{0:{width}} {1:12} {2:12}".format(s.name(), s.schema_id(), s.attr_count(),
+                                                     width=col_len))
 
     def show_table(self, name):
         """Show a schema definition
