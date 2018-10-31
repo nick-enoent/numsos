@@ -334,8 +334,6 @@ class SosDataSink(DataSink):
             self.initialize = False
         self.results = results
         for self.row_no in range(0, results.get_series_size()):
-            # If the object exists, use it, if not, allocate a new object
-            obj = self.get_object(results
             obj = self.schema.alloc()
             for col in self.columns:
                 obj[col.attr_id] = col.value
