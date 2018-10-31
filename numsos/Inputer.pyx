@@ -147,6 +147,14 @@ cdef class Default(object):
                 typ_str = 'datetime64[us]'
             elif typ == Sos.TYPE_STRUCT:
                 typ_str = 'uint8'
+            elif typ == Sos.TYPE_UINT64:
+                typ_str = 'double'
+            elif typ == Sos.TYPE_UINT32:
+                typ_str = 'double'
+            elif typ == Sos.TYPE_INT64:
+                typ_str = 'double'
+            elif typ == Sos.TYPE_INT32:
+                typ_str = 'double'
             else:
                 typ_str = Sos.sos_type_strs[typ].lower()
                 typ_str = typ_str.replace('_array', '')
