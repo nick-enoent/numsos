@@ -1,0 +1,135 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+from numsos.DataSink import CsvDataSink, SosDataSink
+from numsos.Transform import Transform
+from numsos.DataSet import DataSet
+from numsos.Stack import Stack
+from numsos.ArgParse import ArgParse
+import numpy as np
+import datetime as dt
+import time
+import argparse
+import sys
+
+def get_times_from_args(args):
+    if args.begin:
+        start = int(args.begin.strftime("%s"))
+    else:
+        start = 0
+    if args.end:
+        end = int(args.end.strftime("%s"))
+    else:
+        end = 0
+    if args.period:
+        end = time.time()
+        start = end - args.period
+    return (start, end)
+
+class Xfrm(Transform):
+    def mem_stats(self, values):
+
+        xfrm.dup()
+        xfrm.mean([ 'MemFree' ], group_name='component_id')
+        size = xfrm.pop().get_series_size()
+
+        xfrm.dup()
+        xfrm['-']([ 'MemTotal', 'MemFree' ]) # MemTotal - MemFree on top
+
+        # append MemTotal to the result
+        xfrm.append()
+
+        # compute the ratio of the MemFree - MemUsed / MemTotal
+        xfrm.dup()
+        xfrm['/']([ 'MemTotal-MemFree', 'MemTotal' ], result="Mem_Used_Ratio")
+        xfrm['*']([ 100.0, 'Mem_Used_Ratio' ], result='Mem_Used_Pct')
+        xfrm.append()
+        mur = xfrm.pop()
+
+        # compute the standard deviation
+        xfrm.push(mur)
+        xfrm.std([ 'Mem_Used_Pct' ])
+
+        # compute the mean
+        xfrm.push(mur)
+        xfrm.mean([ 'Mem_Used_Pct' ])
+
+        # compute the min memory used
+        xfrm.push(mur)
+        xfrm.min([ 'Mem_Used_Pct' ], group_name='component_id')
+        xfrm.minrow('Mem_Used_Pct_min')
+        xfrm.top().rename('component_id', 'Min_Mem_Nid')
+
+        # compute the max memory used
+        xfrm.push(mur)
+        xfrm.max([ 'Mem_Used_Pct' ], group_name='component_id')
+        xfrm.maxrow('Mem_Used_Pct_max')
+        xfrm.top().rename('component_id', 'Max_Mem_Nid')
+
+        # combine the results
+        xfrm.append([ 'Min_Mem_Nid', 'Mem_Used_Pct_min' ])
+        xfrm.append([ 'Mem_Used_Pct_mean' ])
+        xfrm.append([ 'Mem_Used_Pct_std' ])
+
+        res = xfrm.pop()
+        print("{0:12} {1:12} {2:12} {3:12.2f} {4:12} {5:12.2f} {6:12.2f} {7:12.8f}".format(
+            int(values[0]),
+            size,
+            int(res['Min_Mem_Nid'][0]),
+            res['Mem_Used_Pct_min'][0],
+            int(res['Max_Mem_Nid'][0]),
+            res['Mem_Used_Pct_max'][0],
+            res['Mem_Used_Pct_mean'][0],
+            res['Mem_Used_Pct_std'][0]))
+
+if __name__ == "__main__":
+    parser = ArgParse(description="Compute memory summary statistics for a job")
+    args = parser.parse_args()
+    (start, end) = get_times_from_args(args)
+
+    cont = Sos.Container(args.path)
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'timestamp', 'job_id', 'component_id', 'MemTotal', 'MemFree' ],
+               from_    = [ 'meminfo_x86_ven0000fam0006mod0057' ],
+               where    = [
+                   [ 'timestamp', Sos.COND_GE, start ],
+                   [ 'timestamp', Sos.COND_LE, end ]
+               ],
+               order_by = 'timestamp')
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
+        "Job ID",
+        "Job Size",
+        "Min Used NID", "Min Used %",
+        "Max Used NID", "Max Used %",
+        "Mean %", "Std"))
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-")))
+
+    xfrm = Xfrm(src, None, limit=1024 * 1024)
+    res = xfrm.begin()
+    while res:
+        res = xfrm.next()
+        if res is not None:
+            # concatenate TOP and TOP~1
+            xfrm.concat()
+
+    xfrm.for_each([ 'job_id' ], xfrm.mem_stats)
+
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-")))
