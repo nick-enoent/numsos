@@ -140,6 +140,49 @@ class Transform(object):
         res.set_series_size(series_len)
         return res
 
+
+    def group(self, series_name, value):
+        dataSet = DataSet()
+        inp = self.pop()
+        grp_ser = inp[series_name]
+        grp_mask = grp_ser == value
+        grp_len = len(grp_ser[grp_mask])
+        for name in inp.series:
+            ser = inp[name]
+            grp = ser[grp_mask]
+            dataSet.append(dataSet.new_set(DataSet.NUMERIC_DATA, grp_len,
+                                           [ name ], grp))
+        dataSet.set_series_size(grp_len)
+        self.push(dataSet)
+        return dataSet
+
+    def _for_each(self, series_list, xfrm_fn, values):
+        if len(series_list) == 0:
+            return xfrm_fn(values)
+        ser = series_list.pop(0)
+        data = self.dup()
+        self.unique(ser)
+        u = self.pop()
+        l = len(values)
+        values.append(0)
+        for v in u[0]:
+            # All rows where top[ser] == v
+            self.push(data)
+            self.group(ser, v)
+            values[l] = v
+            self._for_each(series_list, xfrm_fn, values)
+
+    def for_each(self, series_list, xfrm_fn):
+        ser = series_list.pop(0)
+        data = self.dup()
+        self.unique(ser)
+        unique_values = self.pop()[0]
+        for v in unique_values:
+            # All rows where top[ser] == v
+            self.push(data)
+            self.group(ser, v)
+            self._for_each(series_list, xfrm_fn, [ v ])
+
     def _by_group(self, series_list, group_name, xfrm_suffix, xfrm_fn,
                   xfrm_fn_args=None, grp_len_fn=lambda src : 1, keep=[]):
         """Group data by a series value
@@ -451,8 +494,7 @@ class Transform(object):
 
         nda = inp[series_name][0:inp.get_series_size()]
         u = np.unique(nda)
-        res = inp.new_set(DataSet.NUMERIC_DATA, len(u), [ series_name + "_unique" ])
-        res[0] = u
+        res = inp.new_set(DataSet.NUMERIC_DATA, len(u), [ series_name + "_unique" ], data=u)
 
         result = DataSet()
         result.append(res)
