@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import datetime as dt
+import re
 import time
 import sys
 
@@ -19,6 +20,26 @@ def valid_date(date_str):
         except:
             msg = "{0} is not a valid date".format(date_str)
             raise argparse.ArgumentTypeError(msg)
+
+def period_spec(period):
+    s = "(?P<count>[0-9]+)(?P<units>[smhd])"
+    x = re.compile(s)
+    m = re.match(x, period)
+    if m is None:
+        msg = "{0} is not a valid period specification".format(period)
+        raise argparse.ArgumentTypeError(msg)
+    count = m.group(1)
+    units = m.group(2)
+    if units == 's':
+        return int(count)
+    elif units == 'm':
+        return int(count) * 60
+    elif units == 'h':
+        return int(count) * 3600
+    elif units == 'd':
+        return int(count) * 86400
+    msg = "{0} {1} {2} is not a valid period specification".format(period, count, units)
+    raise argparse.ArgumentTypeError(msg)
 
 def fmt_begin_date(days):
     now = int(dt.datetime.now().strftime('%s'))
@@ -63,7 +84,17 @@ class ArgParse(object):
             "--end",
             type=valid_date,
             help="Specify the end time/date for similar jobs. ")
-
+        self.parser.add_argument(
+            "--period",
+            type=period_spec,
+            help="Specify a period for the analysis." \
+            "The format is [count][units] where," \
+            "  count : A number\n" \
+            "  units :\n" \
+            "        s - seconds\n" \
+            "        m - minutes\n" \
+            "        h - hours\n" \
+            "        d - days\n")
     def add_argument(self, *args, **kwargs):
         return self.parser.add_argument(*args, **kwargs)
 
