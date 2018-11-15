@@ -87,16 +87,18 @@ if __name__ == "__main__":
     parser = ArgParse(description="Compute memory summary statistics for a job")
     args = parser.parse_args()
     (start, end) = get_times_from_args(args)
+    where = []
+    if start > 0:
+        where.append([ 'timestamp', Sos.COND_GE, start ])
+    if end > 0:
+        where.append([ 'timestamp', Sos.COND_LE, end ])
 
     cont = Sos.Container(args.path)
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'timestamp', 'job_id', 'component_id', 'MemTotal', 'MemFree' ],
                from_    = [ 'meminfo_x86_ven0000fam0006mod0057' ],
-               where    = [
-                   [ 'timestamp', Sos.COND_GE, start ],
-                   [ 'timestamp', Sos.COND_LE, end ]
-               ],
+               where    = where,
                order_by = 'timestamp')
     print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
         "Job ID",
