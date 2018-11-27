@@ -4,7 +4,6 @@ from sosdb import Sos
 from numsos.DataSource import SosDataSource
 from numsos.DataSink import CsvDataSink, SosDataSink
 from numsos.Transform import Transform
-from numsos.DataSet import DataSet
 from numsos.Stack import Stack
 from numsos.ArgParse import ArgParse
 import numpy as np
@@ -13,25 +12,25 @@ import time
 import argparse
 import sys
 
-def do_job(cont, job_id):
+def do_job(cont, job_id, schema):
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'meminfo.*' ],
-               from_    = [ 'meminfo' ],
+               from_    = [ schema ],
                where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
                         ],
                order_by = 'job_comp_time')
-    xfrm = Transform(src, None, limit=4096)
+    xfrm = Transform(src, None, limit=1024*1024)
 
     run = True
 
-    res = xfrm.begin(count=1024)
+    res = xfrm.begin()
     if res is None:
         # Job was too short to record data
         return
 
     while res is not None:
-        res = xfrm.next(count=1024)
+        res = xfrm.next()
         if res is not None:
             # concatenate TOP and TOP~1
             xfrm.concat()
@@ -44,12 +43,12 @@ def do_job(cont, job_id):
     xfrm['-']([ 'MemTotal', 'MemFree' ]) # MemTotal - MemFree on top
 
     # append MemTotal to the result
-    xfrm.append(series=[ 'MemTotal' ], source=result)
+    xfrm.append(series_list=[ 'MemTotal' ], source=result)
 
     # compute the ratio of the MemFree - MemUsed / MemTotal
     xfrm['/']([ 'MemTotal-MemFree', 'MemTotal' ], result="Mem_Used_Ratio")
     series = xfrm.top().series           # Has the value "Mem_Used_Ratio"
-    mem_used_ratio = xfrm.append(series=[ 'component_id' ], source=result)
+    mem_used_ratio = xfrm.append(series_list=[ 'component_id' ], source=result)
 
     # compute the standard deviation
     xfrm.std(series)
@@ -71,9 +70,9 @@ def do_job(cont, job_id):
     xfrm.top().rename('component_id', 'Max_Mem_Nid')
 
     # combine the results
-    xfrm.append([ 'Min_Mem_Nid', 'Mem_Used_Ratio_min' ])
-    xfrm.append([ 'Mem_Used_Ratio_mean' ])
-    xfrm.append([ 'Mem_Used_Ratio_std' ])
+    xfrm.append()
+    xfrm.append()
+    xfrm.append()
 
     # compute the start and job duration
     xfrm.push(result)
@@ -93,7 +92,20 @@ def do_job(cont, job_id):
     xfrm.extract([ 'job_id' ], source=result)
     xfrm.top().set_series_size(1) # Make it the same size as the result
     xfrm.append()
-    return xfrm.pop()
+
+    src = SosDataSource()
+    src.config(cont=cont)
+    src.select([ 'job_id', 'job_name', 'job_user' ],
+              from_    = [ 'jobinfo' ],
+              where    = [ [ 'job_id', Sos.COND_EQ, job_id ] ],
+              order_by = 'job_id')
+    res = src.get_results()
+
+    result = xfrm.pop()
+    xfrm.drop()
+    result.append_array(1, 'job_name', res['job_name'])
+    result.append_array(1, 'job_user', res['job_user'])
+    return result
 
 def get_jobs(cont, args):
     (start, end) = get_times_from_args(args)
@@ -109,7 +121,7 @@ def get_jobs(cont, args):
     res = xfrm.begin()
     if res is None:
         return None
-    xfrm.unique('job_id')
+    xfrm.unique('job_id', result='job_id')
     return xfrm.top()
 
 def get_times_from_args(args):
@@ -125,6 +137,9 @@ def get_times_from_args(args):
 
 if __name__ == "__main__":
     parser = ArgParse(description="Compute memory summary statistics for a job")
+    parser.add_argument(
+        "--schema", required=False, default='meminfo',
+        help="The meminfo schema name.")
     args = parser.parse_args()
 
     cont = Sos.Container(args.path)
@@ -133,18 +148,42 @@ if __name__ == "__main__":
         print("There were no jobs in the specified time period.")
         sys.exit(0)
 
-    xfrm = Transform(None, None)
-    res = None
-    j = jobs[0]
-    for i in range(0, len(j)):
-        res = do_job(cont, j[i])
-        if res:
-            i += 1
-            break
-    if res:
-        xfrm.push(res)
-        for job_id in j[i:]:
-            res = do_job(cont, job_id)
-            if res:
-                xfrm.concat(source=res)
-        xfrm.top().show(width=20)
+    print("{0:8} {1:12} {2:8} {3:16} {4:8} {5:8} {6:8} {7:8} {8:8} {9:8} {10:8}".format(
+        "Job", "Name", "User",
+        "Start", "Duration",
+        "Max NID", "Max Used",
+        "Min NID", "Min Used",
+        "Mean Used", "Std Dev"))
+    print("{0:8} {1:12} {2:8} {3:16} {4:8} {5:8} {6:8} {7:8} {8:8} {9:8} {10:8}".format(
+        "-".ljust(8, "-"), "-".ljust(12, "-"), "-".ljust(8, "-"),
+        "-".ljust(16, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-")))
+
+    for job_id in jobs['job_id']:
+        job_id = int(job_id)
+        res = do_job(cont, job_id, args.schema)
+        if not res:
+            print("No data for job_id {0}".format(job_id))
+            continue
+        print("{0:8}".format(int(res['job_id'][0])), end=' ')
+        print("{0:12}".format(res['job_name'][0]), end=' ')
+        print("{0:8}".format(res['job_user'][0]), end=' ')
+        d = dt.datetime.fromtimestamp(res['start_time'][0] / 1000000.0)
+        print("{0:16}".format(d.strftime("%F %R")), end=' ')
+        print("{0:7.0f}s".format(res['Duration'][0] / 1000000.0), end=' ')
+        print("{0:>8}".format(int(res['Max_Mem_Nid'][0])), end=' ')
+        print("{0:>8}".format("%{0:.2f}".format(res['Mem_Used_Ratio_max'][0] * 100.0)), end=' ')
+        print("{0:>8}".format(int(res['Min_Mem_Nid'][0])), end=' ')
+        print("{0:>8}".format("%{0:.2f}".format(res['Mem_Used_Ratio_min'][0] * 100.0)), end=' ')
+        print("{0:>8}".format("%{0:.2f}".format(res['Mem_Used_Ratio_mean'][0] * 100.0)), end=' ')
+        print("{0:>8}".format("%{0:.2f}".format(res['Mem_Used_Ratio_std'][0] * 100.0)))
+
+    print("{0:8} {1:12} {2:8} {3:16} {4:8} {5:8} {6:8} {7:8} {8:8} {9:8} {10:8}".format(
+        "-".ljust(8, "-"), "-".ljust(12, "-"), "-".ljust(8, "-"),
+        "-".ljust(16, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-"),
+        "-".ljust(8, "-"), "-".ljust(8, "-")))
+

@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 from sosdb import Sos
-from numsos import DataSet, Csv
+from numsos import Csv
 import datetime as dt
 import copy
 import time

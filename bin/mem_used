@@ -4,8 +4,7 @@ from sosdb import Sos
 from numsos.DataSource import SosDataSource
 from numsos.DataSink import CsvDataSink, SosDataSink
 from numsos.Transform import Transform
-from numsos.DataSet import DataSet
-from numsos.Stack import Stack
+from sosdb import DataSet
 from numsos.ArgParse import ArgParse
 import numpy as np
 import datetime as dt
@@ -85,6 +84,9 @@ class Xfrm(Transform):
 
 if __name__ == "__main__":
     parser = ArgParse(description="Compute memory summary statistics for a job")
+    parser.add_argument(
+        "--schema", required=False, default='meminfo',
+        help="The meminfo schema name.")
     args = parser.parse_args()
     (start, end) = get_times_from_args(args)
     where = []
@@ -97,7 +99,7 @@ if __name__ == "__main__":
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'timestamp', 'job_id', 'component_id', 'MemTotal', 'MemFree' ],
-               from_    = [ 'meminfo_x86_ven0000fam0006mod0057' ],
+               from_    = [ args.schema ],
                where    = where,
                order_by = 'timestamp')
     print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(

@@ -1,6 +1,6 @@
 from __future__ import print_function
 import numpy as np
-from numsos.DataSet import DataSet
+from sosdb.DataSet import DataSet
 import textwrap
 
 class Stack(object):

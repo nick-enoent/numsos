@@ -1,6 +1,6 @@
 import numpy as np
 from numsos.Stack import Stack
-from numsos.DataSet import DataSet, ArrayDataByIndex, ListDataByIndex
+from sosdb.DataSet import DataSet
 
 class Transform(object):
     def __init__(self, dataSrc, dataSink, limit=1024):
@@ -67,15 +67,10 @@ class Transform(object):
         -- The row number 0 ... get_series_size()
         """
         inp = self.stack.pop()
-        res = inp.new_set(DataSet.NUMERIC_DATA, 1, inp.series)
-
-        for col in range(0, inp.get_series_count()):
+        res = DataSet().new(1, inp.series)
+        for col in range(0, inp.series_count):
             res[col][0] = inp[col][row_no]
-
-        res.set_series_size(1)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=[]):
         """Compute the difference of a series
@@ -118,17 +113,14 @@ class Transform(object):
         else:
             res = self._by_row(series_list, xfrm_suffix, np.diff,
                                xfrm_len_fn=lambda src : src.get_series_size() - 1)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def _by_row(self, series_list, xfrm_suffix, xfrm_fn, xfrm_fn_args=None,
                 xfrm_len_fn=lambda src : 1):
         series_names = [ ser + xfrm_suffix for ser in series_list ]
         inp = self.stack.pop()
         series_len = xfrm_len_fn(inp)
-        res = inp.new_set(DataSet.NUMERIC_DATA, series_len, series_names)
-
+        res = DataSet().new(series_len, series_names)
         col = 0
         for ser in series_list:
             src = inp[ser][0:inp.get_series_size()]
@@ -137,9 +129,7 @@ class Transform(object):
             else:
                 res[col] = xfrm_fn(src, xfrm_fn_args)
             col += 1
-        res.set_series_size(series_len)
         return res
-
 
     def group(self, series_name, value):
         dataSet = DataSet()
@@ -150,8 +140,7 @@ class Transform(object):
         for name in inp.series:
             ser = inp[name]
             grp = ser[grp_mask]
-            dataSet.append(dataSet.new_set(DataSet.NUMERIC_DATA, grp_len,
-                                           [ name ], grp))
+            dataSet.append_array(grp_len, name, grp)
         dataSet.set_series_size(grp_len)
         self.push(dataSet)
         return dataSet
@@ -228,8 +217,6 @@ class Transform(object):
             grp_start[value] = res_size
             res_size += grp_len[value]
 
-        # allocate the result
-        # res = inp.new_set(DataSet.NUMERIC_DATA, res_size, series_names)
         # Allocate the result arrays.
         res = {}
         for col in range(0, len(dst_names)):
@@ -239,10 +226,9 @@ class Transform(object):
             if typ == np.string_:
                 typ = np.dtype('|S256')
             dst_name = dst_names[col]
-            data = np.ndarray(src.shape, dtype=typ)
-            res[dst_name] = inp.new_set(DataSet.NUMERIC_DATA,
-                                        inp.series_size, [ dst_name ],
-                                        data=data)
+            res[dst_name] = DataSet().new(inp.series_size,
+                                        [ dst_name ],
+                                        types={ dst_name : typ })
 
         # copy the group and keep data to the result. src_names and
         # dst_names are the same for keep columns
@@ -255,7 +241,7 @@ class Transform(object):
                 grp_dst = res[name]
                 start_row = grp_start[value]
                 res_len = grp_len[value]
-                grp_dst[start_row:start_row+res_len] = grp_src[0:res_len]
+                grp_dst[0][start_row:start_row+res_len] = grp_src[0:res_len]
 
         ser_col = len(keep)
         for col in range(ser_col, ser_col + len(series_list)):
@@ -266,14 +252,14 @@ class Transform(object):
                 start_row = grp_start[value]
                 res_len = grp_len[value]
                 if xfrm_fn_args is None:
-                    grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src)
+                    grp_dst[0][start_row:start_row+res_len] = xfrm_fn(grp_src)
                 else:
-                    grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src, xfrm_fn_args)
+                    grp_dst[0][start_row:start_row+res_len] = xfrm_fn(grp_src, xfrm_fn_args)
             col += 1
         result = DataSet()
         for col in range(0, len(dst_names)):
             name = dst_names[col]
-            result.append(res[name])
+            result.append_series(res[name])
         result.set_series_size(res_size)
         return result
 
@@ -337,12 +323,8 @@ class Transform(object):
             src = inp[ser][0:series_size]
             res = np.histogram(src, bins=bins, range=range,
                                weights=weights, density=density)
-            hist_bins = inp.new_set(DataSet.NUMERIC_DATA, len(res[0]),
-                                    [ ser + xfrm_suffix ], data=res[0])
-            hist.append(hist_bins)
-            hist_edges = inp.new_set(DataSet.NUMERIC_DATA, len(res[1]),
-                                     [ ser + "_edges" ], data=res[1])
-            edges.append(hist_edges)
+            hist.append_array(len(res[0]), ser + xfrm_suffix, res[0])
+            edges.append_array(len(res[1]), ser + "_edges", res[1])
         self.stack.push(hist)
         return self.stack.push(edges)
 
@@ -353,9 +335,7 @@ class Transform(object):
             res = self._by_group(series_list, group_name, xfrm_suffix, np.sum, keep=keep)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.sum)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def mean(self, series_list, group_name=None, xfrm_suffix="_mean", keep=[]):
         """Compute mean for series across rows
@@ -364,9 +344,7 @@ class Transform(object):
             res = self._by_group(series_list, group_name, xfrm_suffix, np.mean, keep=keep)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.mean)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def min(self, series_list, group_name=None, xfrm_suffix="_min", keep=[]):
         """Compute min for series across rows
@@ -375,9 +353,7 @@ class Transform(object):
             res = self._by_group(series_list, group_name, xfrm_suffix, np.min, keep=keep)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.min)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def minrow(self, series):
         """Return the row with the minimum value in the series_list
@@ -390,16 +366,13 @@ class Transform(object):
 
         """
         inp = self.stack.pop()
-        res = inp.new_set(DataSet.NUMERIC_DATA, 1, inp.series)
+        res = DataSet().new(1, inp.series)
 
         src = inp[series][0:inp.get_series_size()]
         row = np.argmin(src)
         for col in range(0, inp.get_series_count()):
             res[col][0] = inp[col][row]
-        res.set_series_size(1)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=[]):
         """Compute min for series across rows
@@ -408,9 +381,7 @@ class Transform(object):
             res = self._by_group(series_list, group_name, xfrm_suffix, np.max, keep=keep)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.max)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def maxrow(self, series):
         """Return the row with the maximum value in the series
@@ -422,16 +393,13 @@ class Transform(object):
         -- The name of the series
         """
         inp = self.stack.pop()
-        res = inp.new_set(DataSet.NUMERIC_DATA, 1, inp.series)
+        res = DataSet().new(1, inp.series)
 
         src = inp[series][0:inp.get_series_size()]
         row = np.argmax(src)
         for col in range(0, inp.get_series_count()):
             res[col][0] = inp[col][row]
-        res.set_series_size(1)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=[]):
         """Compute the standard deviation of a series
@@ -448,14 +416,12 @@ class Transform(object):
             res = self._by_group(series_list, group_name, xfrm_suffix, np.std, keep=keep)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.std)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def _per_row(self, series_list, xfrm_suffix, xfrm_fn):
         series_names = [ ser + xfrm_suffix for ser in series_list ]
         inp = self.stack.pop()
-        res = inp.new_set(DataSet.NUMERIC_DATA, inp.get_series_size(), series_names)
+        res = DataSet().new(inp.get_series_size(), series_names)
 
         col = 0
         for ser in series_list:
@@ -478,11 +444,9 @@ class Transform(object):
                                  np.gradient, grp_len_fn=lambda src : len(src), keep=keep)
         else:
             res = self._per_row(series_list, xfrm_suffix, np.gradient)
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
-    def unique(self, series_name):
+    def unique(self, series_name, result=None):
         """Return the unique values of a series
 
         See numpy.unique for more information.
@@ -491,14 +455,14 @@ class Transform(object):
         -- A series name
         """
         inp = self.stack.pop()
-
         nda = inp[series_name][0:inp.get_series_size()]
         u = np.unique(nda)
-        res = inp.new_set(DataSet.NUMERIC_DATA, len(u), [ series_name + "_unique" ], data=u)
 
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        if result == None:
+            result = series_name + "_unique"
+        res = DataSet()
+        res.append_array(len(u), result, u)
+        return self.stack.push(res)
 
     def add(self, series_list, result=None):
         """Add a sequence of series
@@ -518,15 +482,13 @@ class Transform(object):
             series_name = result
 
         inp = self.stack.pop()
-        res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
+        res = DataSet().new(inp.get_series_size(), [ series_name ])
 
         res[0] = inp[series_list[0]]
         for series in series_list[1:]:
             res[0] += inp[series]
 
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def subtract(self, series_list, result=None):
         """Subtract a sequence of series
@@ -545,15 +507,13 @@ class Transform(object):
             series_name = result
 
         inp = self.stack.pop()
-        res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
+        res = DataSet().new(inp.get_series_size(), [ series_name ])
 
         res[0] = inp[series_list[0]]
         for series in series_list[1:]:
             res[0] -= inp[series]
 
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def multiply(self, series_list, result=None):
         """Multiple a sequence of series together
@@ -575,7 +535,7 @@ class Transform(object):
             series_name = result
 
         inp = self.stack.pop()
-        res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
+        res = DataSet().new(inp.get_series_size(), [ series_name ])
 
         typ = type(series_list[0])
         if typ == float or typ == int:
@@ -588,9 +548,7 @@ class Transform(object):
             else:
                 res[0] *= inp[series]
 
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def divide(self, series_list, result=None, nan=0.0):
         """Divide a sequence of series
@@ -613,7 +571,7 @@ class Transform(object):
             series_name = result
 
         inp = self.stack.pop()
-        res = inp.new_set(inp.NUMERIC_DATA, inp.get_series_size(), [ series_name ])
+        res = DataSet().new(inp.get_series_size(), [ series_name ])
 
         typ = type(series_list[0])
         if typ == float or typ == int:
@@ -621,15 +579,15 @@ class Transform(object):
         else:
             res[0] = inp[series_list[0]]
         for series in series_list[1:]:
-            with np.errstate(divide='ignore'):
-                res[0] /= inp[series]
-            r = res[0]
-            r[np.isnan(r)] = nan
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+            nda = res[0]
+            ndb = inp[series]
+            with np.errstate(all='ignore'):
+                nda /= ndb
+            nda[np.isnan(nda)] = 0
 
-    def append(self, series=None, source=None):
+        return self.stack.push(res)
+
+    def append_series(self, series_list=None, source=None):
         """Append series
 
         Append series from TOP-1 to TOP and push the result. If the
@@ -647,9 +605,7 @@ class Transform(object):
         top = self.stack.pop()
         if source is None:
             source = self.stack.pop()
-        elif series is None:
-            series = source.series
-        top.append(source, series=series)
+        top.append_series(source, series_list=series_list)
         return self.stack.push(top)
 
     def extract(self, series_list, rename=None, source=None, rows=None):
@@ -689,7 +645,8 @@ class Transform(object):
             series_size = source.get_series_size()
         else:
             series_size = rows[1] - rows[0]
-        res = source.new_set(source.NUMERIC_DATA, series_size, series_names)
+
+        res = DataSet().new(series_size, series_names)
 
         for i in range(0, len(series_list)):
             if rows is None:
@@ -697,9 +654,7 @@ class Transform(object):
             else:
                 res[i] = source[series_list[i]][rows[0]:rows[1]]
 
-        result = DataSet()
-        result.append(res)
-        return self.stack.push(result)
+        return self.stack.push(res)
 
     def concat(self, source=None):
         """Concatenate series data from the two DataSet(s)

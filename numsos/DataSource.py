@@ -1,7 +1,8 @@
 from __future__ import print_function
 import numpy as np
 from sosdb import Sos
-from numsos import DataSet, Csv
+from sosdb.DataSet import DataSet
+from numsos import Csv
 from numsos import Inputer
 import datetime as dt
 import time
@@ -54,7 +55,7 @@ class DebugInputer(object):
         self.limit = limit
         self.array_limit = self.DEF_ARRAY_LIMIT
         self.query = query
-        self.dataset = DataSet.DataSet()
+        self.dataset = DataSet()
         for col in self.query.get_columns():
             typ = col.attr_type
             if typ == Sos.TYPE_TIMESTAMP:
@@ -75,7 +76,7 @@ class DebugInputer(object):
             else:
                 data = np.zeros([ self.limit ], dtype=np.dtype(typ_str))
             col.set_data(data)
-            self.dataset.append(DataSet.ArrayDataByIndex(self.limit, [ col.col_name ], data))
+            self.dataset.append(ArrayDataByIndex(self.limit, [ col.col_name ], data))
         self.reset(start=start)
 
     def reset(self, start=0):
@@ -116,7 +117,7 @@ class ResultByIndexInputer(object):
         self.limit = limit
         self.array_limit = self.DEF_ARRAY_LIMIT
         self.query = query
-        self.dataset = DataSet.DataSet()
+        self.dataset = DataSet()
         type_groups = group_cols_by_type(self.query.get_columns())
         for typ in type_groups:
             cols = type_groups[typ]
@@ -135,7 +136,7 @@ class ResultByIndexInputer(object):
             else:
                 data = np.zeros([ self.limit, len(cols) ], dtype=np.dtype(typ_str))
             series = [ col.col_name for col in cols ]
-            self.dataset.append(DataSet.ArrayDataByIndex(self.limit, series, data))
+            self.dataset.append(ArrayDataByIndex(self.limit, series, data))
 
     def input(self, row):
         for col in self.query.get_columns():
@@ -199,11 +200,11 @@ class ResultByColumnInputer(object):
         if self.row_count == 0:
             return None
 
-        result = DataSet.DataSet()
-        result.append(DataSet.ArrayDataByColumn(self.row_count,
+        result = DataSet()
+        result.append(ArrayDataByColumn(self.row_count,
                                         self.arraycols, self.ndarray))
         if len(self.alist) > 0:
-            result.append(DataSet.ListDataByColumn(self.row_count,
+            result.append(ListDataByColumn(self.row_count,
                                                    self.listcols, self.alist))
         return result
 
@@ -341,7 +342,7 @@ class DataSource(object):
                   end=' ', file=file)
         print("\n{0} record(s)".format(count), file=file)
 
-    def get_results(self, limit=None, wait=None, reset=True, order='index', keep=0,
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
 
         """Return a DataSet from the DataSource
@@ -370,28 +371,7 @@ class DataSource(object):
                  previous window needs to be subtracted from the first
                  sample of the next window (see Transform.diff())
         """
-        if limit is None:
-            limit = self.window
-        if inputer is None:
-            if order == 'index':
-                # inp = ResultByIndexInputer(self, limit, start=keep)
-                inp = Inputer.Default(self, limit, start=keep)
-            else:
-                inp = ResultByColumnInputer(self, limit, start=keep)
-        else:
-            inp = inputer
-        if keep and self.last_result is None:
-            raise ValueError("Cannot keep results from an empty previous result.")
-        count = self.query(inp, reset=reset, wait=wait)
-        result = inp.get_results()
-        if keep:
-            last_row = self.last_result.get_series_size() - keep
-            for row in range(0, keep):
-                for col in range(0, result.series_count):
-                    result[col, row] = self.last_result[col, last_row]
-                last_row += 1
-        self.last_result = result
-        return self.last_result
+        raise NotImplemented()
 
 class CsvDataSource(DataSource):
 
@@ -573,6 +553,27 @@ class CsvDataSource(DataSource):
                 break
         return rec_count
 
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
+                    inputer=None):
+        if limit is None:
+            limit = self.window
+        if inputer is None:
+            inp = Inputer.Default(self, limit, start=keep)
+        else:
+            inp = inputer
+        if keep and self.last_result is None:
+            raise ValueError("Cannot keep results from an empty previous result.")
+        count = self.query(inp, reset=reset, wait=wait)
+        result = inp.get_results()
+        if keep:
+            last_row = self.last_result.get_series_size() - keep
+            for row in range(0, keep):
+                for col in range(0, result.series_count):
+                    result[col, row] = self.last_result[col, last_row]
+                last_row += 1
+        self.last_result = result
+        return self.last_result
+
 class SosDataSource(DataSource):
     """Implements a SOS DB analysis Transform data source.
     """
@@ -714,4 +715,50 @@ class SosDataSource(DataSource):
             return self.query_.query(inputer, reset=reset, wait=wait)
         return 0
 
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
+                    inputer=None):
 
+        """Return a DataSet from the DataSource
+
+        The get_results() method returns the data identified by the
+        select() method as a DataSet.
+
+        Keyword Parameters:
+
+        limit -- The maximum number of records to return. This limits
+                 how large each series in the resulting DataSet. If
+                 not specified, the limit is DataSource.window_size
+
+        wait  -- A wait-specification that indicates how to wait for
+                 results if the data available is less than
+                 'limit'. See Sos.Query.query() for more information.
+
+        reset -- Set to True to re-start the query at the beginning of
+                 the matching data.
+
+        keep  -- Return [0..keep] as the [N-keep, N] values from the
+                 previous result. This is useful when the data from
+                 the previous 'window' needs to be combined with the
+                 the next window, for example when doing 'diff' over a
+                 large series of input data, the last sample from the
+                 previous window needs to be subtracted from the first
+                 sample of the next window (see Transform.diff())
+        """
+        if limit is None:
+            limit = self.window
+        if inputer is None:
+            inp = Sos.QueryInputer(self.query_, limit, start=keep)
+        else:
+            inp = inputer
+        if keep and self.last_result is None:
+            raise ValueError("Cannot keep results from an empty previous result.")
+        count = self.query(inp, reset=reset, wait=wait)
+        result = inp.to_dataset()
+        if keep:
+            last_row = self.last_result.get_series_size() - keep
+            for row in range(0, keep):
+                for col in range(0, result.series_count):
+                    result[col, row] = self.last_result[col, last_row]
+                last_row += 1
+        self.last_result = result
+        return self.last_result

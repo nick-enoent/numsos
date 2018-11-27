@@ -18,8 +18,8 @@ Inputer.c: Inputer.pyx
 	cython --gdb $< -o $@
 
 pkgpythondir=${pythondir}/numsos
+#	DataSet.py
 pkgpython_PYTHON = __init__.py \
-	DataSet.py \
 	Csv.py \
 	DataSource.py \
 	DataSink.py \
