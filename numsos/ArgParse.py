@@ -76,6 +76,9 @@ class ArgParse(object):
             "--today", action="store_true",
             help="Show today's results (since midnight)")
         self.parser.add_argument(
+            "--hourly", action="store_true",
+            help="Show results in the last hour")
+        self.parser.add_argument(
             "--begin",
             type=valid_date,
             help="Specify the start time/date for similar jobs. " \
@@ -109,6 +112,9 @@ class ArgParse(object):
         if args.today:
             now = dt.datetime.now()
             args.begin = dt.datetime(now.year, now.month, now.day)
+
+        if args.hourly:
+            args.begin = fmt_begin_date(1.0 / 24.0)
 
         if args.daily:
             args.begin = fmt_begin_date(1)

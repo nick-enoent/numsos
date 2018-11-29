@@ -98,15 +98,13 @@ def get_job(cont, job_id):
     res = src.get_results()
     if res is None:
         return None
-    component_time = {}
-    node_id = 0
-    for row in range(0, res.series_size):
-        comp_id = int(res['component_id'][row])
-        if comp_id not in component_time:
-            component_time[comp_id] = ( int(res['job_end'][row]), node_id )
-            node_id += 1
-
-    return component_time
+    xfrm = Transform(src, None, limit=4096)
+    res = xfrm.begin()
+    xfrm.max([ 'job_end' ], group_name='component_id')
+    comp_time = xfrm.pop()
+    nodes = np.arange(comp_time.get_series_size())
+    comp_time.append_array(comp_time.get_series_size(), 'node_id', nodes)
+    return comp_time
 
 event_name_map = {
     "PAPI_TOT_INS" : "tot_ins",
@@ -185,6 +183,8 @@ def print_rank_metrics(jobs, job, args):
     width = [ 5 ] + [ 14 for x in range(0, len(series_names)-1) ]
     col_no = 0
     for ser in series_names:
+        if ser not in nice_names:
+            continue
         name = nice_names[ser]
         wrap.append(textwrap.wrap(name, width[col_no]))
         col_no += 1
@@ -205,6 +205,8 @@ def print_rank_metrics(jobs, job, args):
         print('')
     col_no = 0
     for ser in series_names:
+        if ser not in nice_names:
+            continue
         print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
         col_no += 1
     print('')
@@ -212,17 +214,21 @@ def print_rank_metrics(jobs, job, args):
     for row in range(0, job.series_size):
         col_no = 0
         for col in series_names:
+            if col not in nice_names:
+                continue
             if col_no == 0:
-                print("{0:{width}} ".format(int(job[col, row]),
+                print("{0:{width}} ".format(int(job.array(col)[row]),
                                             width=width[col_no]), end='')
             else:
-                print("{0:{width}} ".format(scale(job[col,row]),
+                print("{0:{width}} ".format(scale(job.array(col)[row]),
                                             width=width[col_no]), end='')
             col_no += 1
         print()
         row_count += 1
     col_no = 0
     for ser in series_names:
+        if ser not in nice_names:
+            continue
         print("{0:{width}}".format('-'.ljust(width[col_no], '-'), width=width[col_no]), end=' ')
         col_no += 1
     print('')
@@ -237,7 +243,7 @@ def print_rank_metrics_csv(job_list, job, args):
     for row in range(0, job.series_size):
         print("{0}".format(job_str(job_list)), end='')
         for col in series_names:
-            print(", {0}".format(job[col,row]), end='')
+            print(", {0}".format(job.array(col)[row]), end='')
         print()
 
 def print_rank_stats(job_id, events, mins, maxs, stats, args):
@@ -367,10 +373,10 @@ def print_job_metrics(jobs, job, args):
         col_no = 0
         for col in series_names:
             if col_no == 0:
-                print("{0:{width}} ".format(int(job[col, row]),
+                print("{0:{width}} ".format(int(job.array(col)[row]),
                                             width=width[col_no]), end='')
             else:
-                print("{0:{width}} ".format(scale(job[col,row]),
+                print("{0:{width}} ".format(scale(job.array(col)[row]),
                                             width=width[col_no]), end='')
             col_no += 1
         print()
@@ -391,16 +397,12 @@ def print_job_metrics_csv(job_list, job, args):
     for row in range(0, job.series_size):
         print("{0}".format(job_str(job_list)), end='')
         for col in series_names:
-            print(", {0}".format(job[col,row]), end='')
+            print(", {0}".format(job.array(col)[row]), end='')
         print()
-
-def to_timestamp(dt64):
-    dd = np.asscalar(dt64)
-    return int(dd.strftime('%s'))
 
 def compute_derived_metrics(cont, job_id, args):
     """Compute derived PAPI Metrics for the specified job"""
-    trim=args.trim
+    trim = args.trim
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'papi-events.*' ],
@@ -413,10 +415,11 @@ def compute_derived_metrics(cont, job_id, args):
     # For each job we need the job end time for each component in order
     # to know when to stop accepting PAPI data for the component.
     job_comp_end = get_job(cont, int(job_id))
-
+    job_comps = job_comp_end.array('component_id')
+    comp_end = job_comp_end.array('job_end_max')
+    nodes = job_comp_end.array('node_id')
     xfrm = Transform(src, None, limit=4096)
 
-    run = True
     res = xfrm.begin(count=4096)
     if res is None:
         # Job was too short to record data
@@ -437,30 +440,32 @@ def compute_derived_metrics(cont, job_id, args):
     # Then the rank is (node-id * cpu_count) + cpu-id
     first = result.series.index('PAPI_TOT_INS')
     event_names = result.series[first:]
-    cpu_count = int(result['PPN'][0])
-    components = result['component_id']
+    cpu_count = int(result.array('PPN')[0])
+    components = result.array('component_id')
 
     # nda is [ timestamp, component_id, job_id, rank, event_0, event_N ]
     nda = np.ndarray([ result.series_size * cpu_count, 4 + len(event_names)])
     outrow = 0
-    timestamps = result['timestamp']
+    timestamps = result.array('timestamp')
     last_comp = None
     outcol = 4
+
     for name in event_names:
-        series = result[name]
+        series = result.array(name)
         outrow = 0
         for inrow in range(0, result.series_size):
             comp_id = int(components[inrow])
-            if comp_id not in job_comp_end:
+            comp = np.where(job_comps == comp_id)[0]
+            if len(comp) == 0:
                 # Some components may have not completed (i.e. jobinfo state ! = 2)
                 continue
-            comp = job_comp_end[comp_id]
-            if timestamps[inrow] >= dt.datetime.utcfromtimestamp(comp[0] - trim):
+            if timestamps[inrow] >= \
+               dt.datetime.utcfromtimestamp(comp_end[comp[0]] - trim):
                 # Don't accept data from the component after the job has exited
                 continue
-            rank = comp[1] * cpu_count
+            rank = nodes[comp[0]] * cpu_count
             for cpu in range(0, cpu_count):
-                nda[outrow,0] = to_timestamp(timestamps[inrow])
+                nda[outrow,0] = timestamps[inrow].astype(float)
                 nda[outrow,1] = comp_id
                 nda[outrow,2] = job_id
                 nda[outrow,3] = rank + cpu              # pseudo-rank
@@ -494,102 +499,71 @@ def compute_derived_metrics(cont, job_id, args):
               keep=[ 'timestamp', 'component_id', 'job_id', 'rank' ])
     rates = xfrm.top()
 
-    # Rename timestamp_rate to bin_width
+    # Convert the sample interval to seconds from uS
     rates.rename('timestamp_rate', 'bin_width')
+    bin_width = rates['bin_width'] / 1000000.0
+
     # Strip the rate off the other series names
     for name in rates.series:
         if "_rate" in name:
             rates.rename(name, name.replace("_rate", ""))
 
-    # Normalize the input by dividing by the bin width, i.e diff(timestamp)
-    res = DataSet()
-    for ser in derived_names:
-        xfrm.dup()
-        xfrm['/']([ ser, 'bin_width' ], result=ser)
-        res.append_series(xfrm.pop())
-
+    data = xfrm.top()
     job = DataSet()
-    job.append_series(rates,
-                   series_list=[ 'timestamp', 'job_id',
-                                 'component_id', 'rank' ])
-    job.append_series(res, series_list=[ 'tot_ins' ])
+    for ser in [ 'timestamp', 'job_id',
+                 'component_id', 'rank' ]:
+        job <<= data[ser]
+
+    # Normalize the input by dividing by the
+    # sample-interval, i.e diff(timestamp)
+    for ser in derived_names:
+        job <<= data[ser] / data['bin_width'] >> ser
 
     # cpi = tot_cyc / tot_ins
-    xfrm.dup()
-    xfrm['/']([ 'tot_cyc', 'tot_ins' ],  result='cpi')
-    job.append_series(xfrm.pop())
+    job <<= job['tot_cyc'] / job['tot_ins'] >> 'cpi'
+
+    # memory accesses
+    mem_acc = job['ld_ins'] + job['sr_ins'] >> 'mem_acc'
 
     # uopi = (ld_ins + sr_ins) / tot_ins
-    xfrm.dup()
-    xfrm['+']([ 'ld_ins', 'sr_ins' ], result='mem_acc')
-    mem_acc = xfrm.top()
-    xfrm.append_series(source=xfrm.pick(1), series_list=['tot_ins'])
-    xfrm['/']([ 'mem_acc', 'tot_ins' ], result='uopi')
-    job.append_series(xfrm.pop())
+    job <<= mem_acc / job['tot_ins'] >> 'uopi'
 
     # l1_miss_rate = (l1_icm + l1_dcm) / tot_ins
-    xfrm.dup()
-    xfrm['+']([ 'l1_icm', 'l1_dcm' ], result='l1_tcm')
-    l1_tcm = xfrm.top()
-    xfrm.append_series(source=xfrm.pick(1), series_list=['tot_ins'])
-    xfrm['/']([ 'l1_tcm', 'tot_ins' ], result='l1_miss_rate')
-    job.append_series(xfrm.pop())
+    l1_tcm = job['l1_icm'] + job['l1_dcm']
+    job <<=  l1_tcm / job['tot_ins'] >> 'l1_miss_rate'
 
     # l1_miss_ratio = (l1_icm + l1_dcm) / (ld_ins + sr_ins)
-    xfrm.push(l1_tcm)
-    xfrm.append_series(source=mem_acc, series_list=['mem_acc'])
-    xfrm['/']([ 'l1_tcm', 'mem_acc' ], result='l1_miss_ratio')
-    job.append_series(xfrm.pop())
+    job <<= l1_tcm / mem_acc >> 'l1_miss_ratio'
 
     # l2_miss_rate = l2_tcm / tot_ins
-    xfrm.dup()
-    xfrm['/']([ 'l2_tcm', 'tot_ins' ], result='l2_miss_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['l2_tcm'] / job['tot_ins'] >> 'l2_miss_rate'
 
     # l2_miss_ratio = l2_tcm / mem_acc
-    xfrm.dup()
-    xfrm.append_series(source=mem_acc, series_list=['mem_acc'])
-    xfrm['/']([ 'l2_tcm', 'mem_acc' ], result='l2_miss_ratio')
-    job.append_series(xfrm.pop())
+    job <<= job['l2_tcm'] / mem_acc >> 'l2_miss_ratio'
 
     # l3_miss_rate = l3_tcm / tot_ins
-    xfrm.dup()
-    xfrm['/']([ 'l3_tcm', 'tot_ins' ], result='l3_miss_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['l3_tcm'] / job['tot_ins'] >> 'l3_miss_rate'
 
     # l3_miss_ratio = l3_tcm / mem_acc
-    xfrm.dup()
-    xfrm['/']([ 'l3_tcm', 'mem_acc' ], result='l3_miss_ratio')
-    job.append_series(xfrm.pop())
+    job <<= job['l3_tcm'] / mem_acc >> 'l3_miss_ratio'
 
     # l2_bandwidth = l2_tca * 64e-6
-    xfrm.dup()
-    xfrm['*']([ 64e-6, 'l2_tca' ], result='l2_bw')
-    job.append_series(xfrm.pop())
+    job <<= job['l2_tca'] * 64e-6 >> 'l2_bw'
 
     # l3_bandwidth = (l3_tca) * 64e-6
-    xfrm.dup()
-    xfrm['*']([ 64e-6, 'l3_tca' ], result='l3_bw')
-    job.append_series(xfrm.pop())
+    job <<= job['l3_tca'] * 64e-6 >> 'l3_bw'
 
     # floating_point
-    xfrm.dup()
-    xfrm['/']([ 'fp_ops', 'tot_ins' ], result='fp_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['fp_ops'] / job['tot_ins'] >> 'fp_rate'
 
     # branch
-    xfrm.dup()
-    xfrm['/']([ 'br_ins', 'tot_ins' ], result='branch_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['br_ins'] / job['tot_ins'] >> 'branch_rate'
 
     # load
-    xfrm.dup()
-    xfrm['/']([ 'ld_ins', 'tot_ins' ], result='load_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['ld_ins'] / job['tot_ins'] >> 'load_rate'
 
     # store
-    xfrm['/']([ 'sr_ins', 'tot_ins' ], result='store_rate')
-    job.append_series(xfrm.pop())
+    job <<= job['sr_ins'] / job['tot_ins'] >> 'store_rate'
 
     return (xfrm, job)
 

@@ -27,60 +27,67 @@ def get_times_from_args(args):
     return (start, end)
 
 class Xfrm(Transform):
+    def get_job_info(self, job_id):
+        src = SosDataSource()
+        src.config(cont=self.source.cont)
+        src.select([ 'job_id', 'job_name', 'job_user' ],
+                   from_    = [ 'jobinfo' ],
+                   where    = [ [ 'job_id', Sos.COND_EQ, job_id ] ],
+                   order_by = 'job_id')
+        res = src.get_results(limit=1)
+        return res.array('job_name')[0], res.array('job_user')[0]
+
     def mem_stats(self, values):
+        self.dup()
+        self.mean([ 'MemFree' ], group_name='component_id')
+        job_size = self.pop().get_series_size()
 
-        xfrm.dup()
-        xfrm.mean([ 'MemFree' ], group_name='component_id')
-        size = xfrm.pop().get_series_size()
+        data = self.top()
 
-        xfrm.dup()
-        xfrm['-']([ 'MemTotal', 'MemFree' ]) # MemTotal - MemFree on top
-
-        # append MemTotal to the result
-        xfrm.append()
-
-        # compute the ratio of the MemFree - MemUsed / MemTotal
-        xfrm.dup()
-        xfrm['/']([ 'MemTotal-MemFree', 'MemTotal' ], result="Mem_Used_Ratio")
-        xfrm['*']([ 100.0, 'Mem_Used_Ratio' ], result='Mem_Used_Pct')
-        xfrm.append()
-        mur = xfrm.pop()
+        # Compute (MemTotal + MemFree) / MemTotal
+        memUsedRatio = (data['MemTotal'] + data['MemFree']) / data['MemTotal']
+        memUsedRatio *= 100.0
+        memUsedRatio.rename(0, 'Mem_Used_Pct')
 
         # compute the standard deviation
-        xfrm.push(mur)
-        xfrm.std([ 'Mem_Used_Pct' ])
+        self.push(memUsedRatio)
+        self.std([ 'Mem_Used_Pct' ])
+        result = self.pop()
 
         # compute the mean
-        xfrm.push(mur)
-        xfrm.mean([ 'Mem_Used_Pct' ])
+        self.push(memUsedRatio)
+        self.mean([ 'Mem_Used_Pct' ])
+        result <<= self.pop()
 
         # compute the min memory used
-        xfrm.push(mur)
-        xfrm.min([ 'Mem_Used_Pct' ], group_name='component_id')
-        xfrm.minrow('Mem_Used_Pct_min')
-        xfrm.top().rename('component_id', 'Min_Mem_Nid')
+        memUsedRatio <<= data['component_id']
+        self.push(memUsedRatio)
+        self.min([ 'Mem_Used_Pct' ], group_name='component_id')
+        self.minrow('Mem_Used_Pct_min')
+        self.top().rename('component_id', 'Min_Mem_Nid')
+        result <<= self.pop()
 
         # compute the max memory used
-        xfrm.push(mur)
-        xfrm.max([ 'Mem_Used_Pct' ], group_name='component_id')
-        xfrm.maxrow('Mem_Used_Pct_max')
-        xfrm.top().rename('component_id', 'Max_Mem_Nid')
+        self.push(memUsedRatio)
+        self.max([ 'Mem_Used_Pct' ], group_name='component_id')
+        self.maxrow('Mem_Used_Pct_max')
+        self.top().rename('component_id', 'Max_Mem_Nid')
+        result <<= self.pop()
 
-        # combine the results
-        xfrm.append([ 'Min_Mem_Nid', 'Mem_Used_Pct_min' ])
-        xfrm.append([ 'Mem_Used_Pct_mean' ])
-        xfrm.append([ 'Mem_Used_Pct_std' ])
+        job_id = int(values[0])
+        job_name, job_user = self.get_job_info(job_id)
 
-        res = xfrm.pop()
-        print("{0:12} {1:12} {2:12} {3:12.2f} {4:12} {5:12.2f} {6:12.2f} {7:12.8f}".format(
-            int(values[0]),
-            size,
-            int(res['Min_Mem_Nid'][0]),
-            res['Mem_Used_Pct_min'][0],
-            int(res['Max_Mem_Nid'][0]),
-            res['Mem_Used_Pct_max'][0],
-            res['Mem_Used_Pct_mean'][0],
-            res['Mem_Used_Pct_std'][0]))
+        print("{0:12} {1:12} {2:12} {3:12} "
+              "{4:12} {5:12.2f} {6:12} {7:12.8f} {8:12.8f} {9:12.8f} ".format(
+                  int(values[0]),
+                  job_name, job_user,
+                  job_size,
+                  int(result.array('Min_Mem_Nid')[0]),
+                  result.array('Mem_Used_Pct_min')[0],
+                  int(result.array('Max_Mem_Nid')[0]),
+                  result.array('Mem_Used_Pct_max')[0],
+                  result.array('Mem_Used_Pct_mean')[0],
+                  result.array('Mem_Used_Pct_std')[0]))
 
 if __name__ == "__main__":
     parser = ArgParse(description="Compute memory summary statistics for a job")
@@ -102,13 +109,15 @@ if __name__ == "__main__":
                from_    = [ args.schema ],
                where    = where,
                order_by = 'timestamp')
-    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
-        "Job ID",
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12} {8:12} {9:12}".format(
+        "Job ID", "Job Name", "User",
         "Job Size",
         "Min Used NID", "Min Used %",
         "Max Used NID", "Max Used %",
         "Mean %", "Std"))
-    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12} {8:12} {9:12}".format(
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
         "-".ljust(12, "-"),
         "-".ljust(12, "-"),
         "-".ljust(12, "-"),
@@ -128,7 +137,9 @@ if __name__ == "__main__":
 
     xfrm.for_each([ 'job_id' ], xfrm.mem_stats)
 
-    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12}".format(
+    print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12} {8:12} {9:12}".format(
+        "-".ljust(12, "-"),
+        "-".ljust(12, "-"),
         "-".ljust(12, "-"),
         "-".ljust(12, "-"),
         "-".ljust(12, "-"),
