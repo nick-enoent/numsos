@@ -260,12 +260,12 @@ def print_rank_stats(job_id, events, mins, maxs, stats, args):
                                                       '-'.ljust(14, '-'),
                                                       '-'.ljust(14, '-')))
     for name in events:
-        min_val = scale(mins[name+'_min'][0])
-        min_rank = int(mins[name+'_min_rank'][0])
-        max_val = scale(maxs[name+'_max'][0])
-        max_rank = int(maxs[name+'_max_rank'][0])
-        mean_val = scale(stats[name+'_mean'][0])
-        std_val = scale(stats[name+'_std'][0])
+        min_val = scale(mins.array(name+'_min')[0])
+        min_rank = int(mins.array(name+'_min_rank')[0])
+        max_val = scale(maxs.array(name+'_max')[0])
+        max_rank = int(maxs.array(name+'_max_rank')[0])
+        mean_val = scale(stats.array(name+'_mean')[0])
+        std_val = scale(stats.array(name+'_std')[0])
 
         print("{0:24} {1:18} {2:18} {3:14} {4:14}"
               .format(name,
@@ -282,12 +282,12 @@ def print_rank_stats(job_id, events, mins, maxs, stats, args):
 def print_rank_stats_csv(job_id, events, mins, maxs, stats, args):
     print("# job_id, metric_name, min, min_rank, max, max_rank, mean, std")
     for name in events:
-        min_val = mins[name+'_min'][0]
-        min_rank = mins[name+'_min_rank'][0]
-        max_val = maxs[name+'_max'][0]
-        max_rank = maxs[name+'_max_rank'][0]
-        mean_val = stats[name+'_mean'][0]
-        std_val = stats[name+'_std'][0]
+        min_val = mins.array(name+'_min')[0]
+        min_rank = mins.array(name+'_min_rank')[0]
+        max_val = maxs.array(name+'_max')[0]
+        max_rank = maxs.array(name+'_max_rank')[0]
+        mean_val = stats.array(name+'_mean')[0]
+        std_val = stats.array(name+'_std')[0]
         print("{0}, {1}, {2}, {3}, {4}, {5}, {6}"
               .format(job_id, name,
                       min_val, min_rank,
@@ -308,12 +308,12 @@ def print_job_stats(job_ids, events, mins, maxs, stats, args):
                                                       '-'.ljust(14, '-'),
                                                       '-'.ljust(14, '-')))
     for name in events:
-        min_val = scale(mins[name+'_min'][0])
-        min_rank = int(mins[name+'_min_job'][0])
-        max_val = scale(maxs[name+'_max'][0])
-        max_rank = int(maxs[name+'_max_job'][0])
-        mean_val = scale(stats[name+'_mean'][0])
-        std_val = scale(stats[name+'_std'][0])
+        min_val = scale(mins.array(name+'_min')[0])
+        min_rank = int(mins.array(name+'_min_job')[0])
+        max_val = scale(maxs.array(name+'_max')[0])
+        max_rank = int(maxs.array(name+'_max_job')[0])
+        mean_val = scale(stats.array(name+'_mean')[0])
+        std_val = scale(stats.array(name+'_std')[0])
 
         print("{0:24} {1:20} {2:20} {3:14} {4:14}"
               .format(name,
