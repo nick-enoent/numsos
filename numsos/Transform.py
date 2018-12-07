@@ -57,7 +57,7 @@ class Transform(object):
         """
         return self._next(count=count, wait=wait, keep=keep, reset=False)
 
-    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=[]):
+    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None):
         """Compute the difference of a series
 
         Pop the top of the stack and compute the difference, i.e.
@@ -166,7 +166,7 @@ class Transform(object):
             self._for_each(series_list, xfrm_fn, [ v ])
 
     def _by_group(self, series_list, group_name, xfrm_suffix, xfrm_fn,
-                  xfrm_fn_args=None, grp_len_fn=lambda src : 1, keep=[]):
+                  xfrm_fn_args=None, grp_len_fn=lambda src : 1, keep=None):
         """Group data by a series value
 
         The transform function is performed over each group of data
@@ -190,6 +190,8 @@ class Transform(object):
                 that are to be retained in the output.
 
         """
+        if keep is None:
+            keep = []
         if group_name not in keep:
             keep.insert(0, group_name)
         dst_names = keep + [ ser + xfrm_suffix for ser in series_list ]
@@ -312,7 +314,7 @@ class Transform(object):
         self.stack.push(hist)
         return self.stack.push(edges)
 
-    def sum(self, series_list, group_name=None, xfrm_suffix="_sum", keep=[]):
+    def sum(self, series_list, group_name=None, xfrm_suffix="_sum", keep=None):
         """Compute sums for series across rows
         """
         if group_name:
@@ -321,7 +323,7 @@ class Transform(object):
             res = self._by_row(series_list, xfrm_suffix, np.sum)
         return self.stack.push(res)
 
-    def mean(self, series_list, group_name=None, xfrm_suffix="_mean", keep=[]):
+    def mean(self, series_list, group_name=None, xfrm_suffix="_mean", keep=None):
         """Compute mean for series across rows
         """
         if group_name:
@@ -330,7 +332,7 @@ class Transform(object):
             res = self._by_row(series_list, xfrm_suffix, np.mean)
         return self.stack.push(res)
 
-    def min(self, series_list, group_name=None, xfrm_suffix="_min", keep=[]):
+    def min(self, series_list, group_name=None, xfrm_suffix="_min", keep=None):
         """Compute min for series across rows
         """
         if group_name:
@@ -358,8 +360,8 @@ class Transform(object):
             res[col,0] = inp.array(col)[row]
         return self.stack.push(res)
 
-    def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=[]):
-        """Compute min for series across rows
+    def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=None):
+        """Compute max for series across rows
         """
         if group_name:
             res = self._by_group(series_list, group_name, xfrm_suffix, np.max, keep=keep)
@@ -385,7 +387,7 @@ class Transform(object):
             res[col,0] = inp.array(col)[row]
         return self.stack.push(res)
 
-    def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=[]):
+    def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=None):
         """Compute the standard deviation of a series
 
         See numpy.std for more information.
@@ -415,7 +417,7 @@ class Transform(object):
         res.set_series_size(inp.get_series_size())
         return res
 
-    def gradient(self, series_list, group_name=None, xfrm_suffix="_grad", keep=[]):
+    def gradient(self, series_list, group_name=None, xfrm_suffix="_grad", keep=None):
         """Compute the gradient of a series
 
         See numpy.gradient for more information.
