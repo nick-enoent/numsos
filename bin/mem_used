@@ -44,8 +44,8 @@ class Xfrm(Transform):
 
         data = self.top()
 
-        # Compute (MemTotal + MemFree) / MemTotal
-        memUsedRatio = (data['MemTotal'] + data['MemFree']) / data['MemTotal']
+        # Compute (MemTotal - MemFree) / MemTotal
+        memUsedRatio = (data['MemTotal'] - data['MemFree']) / data['MemTotal']
         memUsedRatio *= 100.0
         memUsedRatio.rename(0, 'Mem_Used_Pct')
 

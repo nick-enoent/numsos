@@ -4,8 +4,7 @@ from sosdb import Sos
 from numsos.DataSource import SosDataSource
 from numsos.DataSink import CsvDataSink, SosDataSink
 from numsos.Transform import Transform
-from numsos.DataSet import DataSet
-from numsos.Stack import Stack
+from sosdb.DataSet import DataSet
 from numsos.ArgParse import ArgParse
 import numpy as np
 import datetime as dt
