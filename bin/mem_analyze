@@ -36,7 +36,7 @@ def do_job(cont, job_id, schema):
     # result now on top of stack
     data = xfrm.top()                  # result on top
 
-    # Compute (MemTotal + MemFree) / MemTotal
+    # Compute (MemTotal - MemFree) / MemTotal
     memUsedRatio = (data['MemTotal'] - data['MemFree']) / data['MemTotal']
     memUsedRatio.rename(0, 'Mem_Used_Ratio')
     xfrm.push(memUsedRatio)
