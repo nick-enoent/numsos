@@ -13,39 +13,42 @@ class TableInputer(object):
     def __init__(self, query, limit, file=sys.stdout):
         self.row_count = 0
         self.limit = limit
-        self.query = query
         self.file = file
 
-    def input(self, row):
-        try:
-            for col in self.query.get_columns():
+    @property
+    def capacity(self):
+        """Return the row capacity of the result"""
+        return self.row_limit
+
+    @property
+    def count(self):
+        """Return the number of rows in the result"""
+        return self.row_count
+
+    def input(self, query, reset=True):
+        self.row_count = 0;
+        if reset:
+            row = query.begin()
+        else:
+            row = query.next()
+        if row:
+            self.row_count = 1
+        else:
+            return True
+
+        while self.row_count < self.limit:
+            for col in row:
                 print(col, end=' ', file=self.file)
             print("", file=self.file)
-        except StopIteration:
-            return False
-        self.row_count += 1
+            row = query.next()
+            if row:
+                self.row_count += 1
+            else:
+                break
+
         if self.row_count == self.limit:
             return False
         return True
-
-def group_cols_by_type(cols):
-    """Group together the columns in the record by their type"""
-    groups = {}
-    for typ in Sos.sos_type_strs:
-        if typ == Sos.TYPE_TIMESTAMP or type == Sos.TYPE_STRUCT:
-            continue
-        for col in cols:
-            col_type = col.attr_type
-            if col_type == Sos.TYPE_TIMESTAMP:
-                col_type = Sos.TYPE_UINT64
-            if col_type == Sos.TYPE_STRUCT:
-                col_type = Sos.TYPE_BYTE_ARRAY
-            if col_type == typ:
-                if typ in groups:
-                    groups[typ].append(col)
-                else:
-                    groups[typ] = [ col ]
-    return groups
 
 class DebugInputer(object):
     DEF_ARRAY_LIMIT = 256
@@ -85,8 +88,8 @@ class DebugInputer(object):
         else:
             self.row_count = self.start
 
-    def input(self, row):
-        for col in self.query.get_columns():
+    def input(self, query, row):
+        for col in query.get_columns():
             typ = col.attr_type
             a = col.value
             array = col.get_data()
@@ -109,104 +112,6 @@ class DebugInputer(object):
             return None
         self.dataset.set_series_size(self.row_count)
         return self.dataset
-
-class ResultByIndexInputer(object):
-    DEF_ARRAY_LIMIT = 256
-    def __init__(self, query, limit, start=0):
-        self.row_count = start
-        self.limit = limit
-        self.array_limit = self.DEF_ARRAY_LIMIT
-        self.query = query
-        self.dataset = DataSet()
-        type_groups = group_cols_by_type(self.query.get_columns())
-        for typ in type_groups:
-            cols = type_groups[typ]
-            typ_str = Sos.sos_type_strs[typ].lower()
-            if typ >= Sos.TYPE_IS_ARRAY:
-                if typ == Sos.TYPE_STRUCT:
-                    typ_str = 'uint8'
-                else:
-                    typ_str = typ_str.replace('_array', '')
-                if typ == Sos.TYPE_STRING:
-                    data = np.zeros([ self.limit, len(cols) ],
-                                    dtype=np.dtype('|S{0}'.format(self.DEF_ARRAY_LIMIT)))
-                else:
-                    data = np.zeros([ self.limit, len(cols), self.array_limit],
-                                    dtype=np.dtype(typ_str))
-            else:
-                data = np.zeros([ self.limit, len(cols) ], dtype=np.dtype(typ_str))
-            series = [ col.col_name for col in cols ]
-            self.dataset.append(ArrayDataByIndex(self.limit, series, data))
-
-    def input(self, row):
-        for col in self.query.get_columns():
-            col_no = self.dataset.series_idx(col.col_name)
-            s = self.dataset.set_with_series_name[col.col_name]
-            s_idx = self.dataset.set_col_map[col_no]
-            # print("{0:12} {1:12}".format(self.row_count, s_idx), "{0:12} = {1}".format(col.col_name, col.value))
-            if col.is_array or col.attr_type == Sos.TYPE_STRUCT:
-                if col.attr_type != Sos.TYPE_STRING:
-                    a = col.value
-                    s.array[self.row_count,s_idx,:len(a)] = a
-                else:
-                    s.array[self.row_count,s_idx] = col.value
-            elif col.attr_type != Sos.TYPE_TIMESTAMP:
-                s.array[self.row_count,s_idx] = col.value
-            else:
-                # force timestamp to a float
-                s.array[self.row_count,s_idx] = col.float_value
-        self.row_count += 1
-        if self.row_count == self.limit:
-            return False
-        return True
-
-    def get_results(self):
-        if self.row_count == 0:
-            return None
-        self.dataset.set_series_size(self.row_count)
-        return self.dataset
-
-class ResultByColumnInputer(object):
-    def __init__(self, query, limit, start=0):
-        self.row_count = start
-        self.limit = limit
-        self.query = query
-        self.listcols = []
-        self.arraycols = []
-        for col in self.query.get_columns():
-            if col.attr_type < Sos.TYPE_TIMESTAMP:
-                self.arraycols.append(col.col_name)
-            else:
-                self.listcols.append(col.col_name)
-        self.ndarray = np.zeros([ len(self.arraycols), self.limit ])
-        self.alist = []
-
-    def input(self, row):
-        col_no = 0
-        row = []
-        for col in self.query.get_columns():
-            if col.attr_type <= Sos.TYPE_TIMESTAMP:
-                self.ndarray[ col_no ][ self.row_count ] = col.float_value
-                col_no += 1
-            else:
-                row.append(col.value)
-        self.alist.append(row)
-        self.row_count += 1
-        if self.row_count == self.limit:
-            return False
-        return True
-
-    def get_results(self):
-        if self.row_count == 0:
-            return None
-
-        result = DataSet()
-        result.append(ArrayDataByColumn(self.row_count,
-                                        self.arraycols, self.ndarray))
-        if len(self.alist) > 0:
-            result.append(ListDataByColumn(self.row_count,
-                                                   self.listcols, self.alist))
-        return result
 
 class DataSource(object):
 
@@ -530,7 +435,7 @@ class CsvDataSource(DataSource):
             idx = self.colnames.index(c.col_name)
             c.update(self, 0, Csv.Attr(self.schema, c.col_name, idx, Sos.TYPE_DOUBLE))
 
-    def query(self, inputer, reset=True, wait=None):
+    def query_(self, inputer, reset=True, wait=None):
         if reset:
             self.reset()
 
@@ -548,7 +453,7 @@ class CsvDataSource(DataSource):
             for col in self.columns:
                 rec.append(col.value)
             rec_count += 1
-            rc = inputer.input(rec)
+            rc = inputer.input(self, rec)
             if not rc:
                 break
         return rec_count
@@ -563,8 +468,8 @@ class CsvDataSource(DataSource):
             inp = inputer
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
-        count = self.query(inp, reset=reset, wait=wait)
-        result = inp.get_results()
+        count = self.query_(inp, reset=reset, wait=wait)
+        result = inp.to_dataset()
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
@@ -746,14 +651,10 @@ class SosDataSource(DataSource):
         """
         if limit is None:
             limit = self.window
-        if inputer is None:
-            inp = Sos.QueryInputer(self.query_, limit, start=keep)
-        else:
-            inp = inputer
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
-        count = self.query(inp, reset=reset, wait=wait)
-        result = inp.to_dataset()
+        count = self.query_.query(inputer, reset=reset, wait=wait)
+        result = self.query_.to_dataset()
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
