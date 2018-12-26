@@ -37,8 +37,10 @@ class TableInputer(object):
             return True
 
         while self.row_count < self.limit:
-            for col in row:
-                print(col, end=' ', file=self.file)
+            col_no = 0
+            for col in query.get_columns():
+                print(col.format(row[col_no]), end=' ', file=self.file)
+                col_no += 1
             print("", file=self.file)
             row = query.next()
             if row:
