@@ -622,7 +622,7 @@ class SosDataSource(DataSource):
             return self.query_.query(inputer, reset=reset, wait=wait)
         return 0
 
-    def get_results(self, limit=None, wait=None, reset=True, keep=0,
+    def get_results(self, interval_ms=None, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
 
         """Return a DataSet from the DataSource
@@ -656,7 +656,10 @@ class SosDataSource(DataSource):
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
         count = self.query_.query(inputer, reset=reset, wait=wait)
-        result = self.query_.to_dataset()
+        if not interval_ms:
+            result = self.query_.to_dataset()
+        else:
+            result = self.query_.to_timeseries(interval_ms=interval_ms)
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
