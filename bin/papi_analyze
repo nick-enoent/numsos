@@ -425,7 +425,7 @@ def compute_derived_metrics(cont, job_id, args):
         # Job was too short to record data
         return (None, None)
 
-    while res is not None:
+    while res is not None and res.get_series_size() == 4096:
         res = xfrm.next(count=4096)
         if res is not None:
             # concatenate TOP and TOP~1
@@ -717,8 +717,6 @@ if __name__ == "__main__":
                         help="Show jobs with the same Kokkos app string as JOB_ID")
     parser.add_argument("--summary", required=False, action="store_true",
                         help="Summarize PAPI derived metrics")
-    parser.add_argument("--outliers", required=False, type=float,
-                        help="Show statistical outliers.")
     parser.add_argument("--trim", required=False, type=float, default=1.0,
                         help="Ignore TRIM seconds of data at the end of each job.")
     parser.add_argument("--csv", required=False, action="store_true",
@@ -739,6 +737,8 @@ if __name__ == "__main__":
         for job_id in job_list[0]:
             xfrm, metrics = compute_derived_metrics(cont, job_id, args)
             if metrics is None:
+                continue
+            if metrics.get_series_size() == 0:
                 continue
             if args.summary:
                 (events, mins, maxs, stats) = compute_rank_stats(xfrm, metrics)
@@ -765,3 +765,5 @@ if __name__ == "__main__":
             print_job_metrics(job_list[0].tolist(), byjob, args)
         if args.verbose:
             print_rank_metrics(job_list[0].tolist(), metrics, args)
+
+    del xfrm
