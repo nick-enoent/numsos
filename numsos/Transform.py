@@ -3,11 +3,12 @@ from numsos.Stack import Stack
 from sosdb.DataSet import DataSet
 
 class Transform(object):
-    def __init__(self, dataSrc, dataSink, limit=1024):
+    def __init__(self, dataSrc, dataSink, limit=1024, intervalMs=None):
         self.source = dataSrc
         self.sink = dataSink
         self.stack = Stack()
         self.window = limit
+        self.interval_ms = intervalMs
         self.keep = 0
         self.ops = {
             "+"    : self.add,
@@ -28,7 +29,10 @@ class Transform(object):
             limit = count
         else:
             limit = self.window
-        result = self.source.get_results(limit=limit, keep=keep, reset=reset, wait=wait)
+        if self.interval_ms:
+            result = self.source.get_results(limit=limit, keep=keep, reset=reset, wait=wait, interval_ms=intervalMs)
+        else:
+            result = self.source.get_results(limit=limit, keep=keep, reset=reset, wait=wait)
         if result:
             return self.stack.push(result)
         return None
@@ -55,6 +59,8 @@ class Transform(object):
         keep -- The number of samples to retain from the previous call
                 to next()
         """
+        if self.interval_ms:
+            return self._next(count=count, wait=wait, keep=keep, reset=False, interval_ms=self.interval_ms)
         return self._next(count=count, wait=wait, keep=keep, reset=False)
 
     def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None):

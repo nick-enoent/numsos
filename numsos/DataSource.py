@@ -659,7 +659,7 @@ class SosDataSource(DataSource):
         if not interval_ms:
             result = self.query_.to_dataset()
         else:
-            result = self.query_.to_timeseries(interval_ms=interval_ms)
+            result = self.query_.to_timeseries(interval_ms=interval_ms, max_array=limit)
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
