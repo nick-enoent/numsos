@@ -1,5 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
-SUBDIRS = numsos
+SUBDIRS = numsos \
+	graf_analysis
 
 EXTRA_DIST = autogen.sh LICENSE.txt
 

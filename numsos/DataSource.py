@@ -2,118 +2,11 @@ from __future__ import print_function
 import numpy as np
 from sosdb import Sos
 from sosdb.DataSet import DataSet
-from numsos import Csv
 from numsos import Inputer
 import datetime as dt
 import time
 import os
 import sys
-
-class TableInputer(object):
-    def __init__(self, query, limit, file=sys.stdout):
-        self.row_count = 0
-        self.limit = limit
-        self.file = file
-
-    @property
-    def capacity(self):
-        """Return the row capacity of the result"""
-        return self.row_limit
-
-    @property
-    def count(self):
-        """Return the number of rows in the result"""
-        return self.row_count
-
-    def input(self, query, reset=True):
-        self.row_count = 0;
-        if reset:
-            row = query.begin()
-        else:
-            row = query.next()
-        if row:
-            self.row_count = 1
-        else:
-            return True
-
-        while self.row_count < self.limit:
-            col_no = 0
-            for col in query.get_columns():
-                print(col.format(row[col_no]), end=' ', file=self.file)
-                col_no += 1
-            print("", file=self.file)
-            row = query.next()
-            if row:
-                self.row_count += 1
-            else:
-                break
-
-        if self.row_count == self.limit:
-            return False
-        return True
-
-class DebugInputer(object):
-    DEF_ARRAY_LIMIT = 256
-    def __init__(self, query, limit, start=0):
-        self.start = start
-        self.row_count = start
-        self.limit = limit
-        self.array_limit = self.DEF_ARRAY_LIMIT
-        self.query = query
-        self.dataset = DataSet()
-        for col in self.query.get_columns():
-            typ = col.attr_type
-            if typ == Sos.TYPE_TIMESTAMP:
-                typ_str = 'datetime64[us]'
-            elif typ == Sos.TYPE_STRUCT:
-                typ_str = 'uint8'
-            else:
-                typ_str = Sos.sos_type_strs[typ].lower()
-                typ_str = typ_str.replace('_array', '')
-
-            if typ >= Sos.TYPE_IS_ARRAY:
-                if typ == Sos.TYPE_STRING:
-                    data = np.zeros([ self.limit ],
-                                    dtype=np.dtype('|S{0}'.format(self.DEF_ARRAY_LIMIT)))
-                else:
-                    data = np.zeros([ self.limit, self.array_limit],
-                                    dtype=np.dtype(typ_str))
-            else:
-                data = np.zeros([ self.limit ], dtype=np.dtype(typ_str))
-            col.set_data(data)
-            self.dataset.append(ArrayDataByIndex(self.limit, [ col.col_name ], data))
-        self.reset(start=start)
-
-    def reset(self, start=0):
-        if start:
-            self.row_count = start
-        else:
-            self.row_count = self.start
-
-    def input(self, query, row):
-        for col in query.get_columns():
-            typ = col.attr_type
-            a = col.value
-            array = col.get_data()
-            if col.is_array or typ == Sos.TYPE_STRUCT:
-                if typ != Sos.TYPE_STRING:
-                    array[self.row_count,:len(a)] = a
-                else:
-                    array[self.row_count] = a
-            elif typ == Sos.TYPE_TIMESTAMP:
-                array[self.row_count] = (a[0] * 1000000) + a[1]
-            else:
-                array[self.row_count] = a
-        self.row_count += 1
-        if self.row_count == self.limit:
-            return False
-        return True
-
-    def get_results(self):
-        if self.row_count == 0:
-            return None
-        self.dataset.set_series_size(self.row_count)
-        return self.dataset
 
 class DataSource(object):
 
@@ -241,7 +134,7 @@ class DataSource(object):
                   end=' ', file=file)
         print("", file=file)
 
-        inp = TableInputer(self, limit)
+        inp = Inputer.TableInputer(self, limit)
         count = self.query(inp, reset=reset)
 
         for col in self.get_columns():
@@ -573,30 +466,40 @@ class SosDataSource(DataSource):
         """Specify which columns, order, and record selection criteria
 
         Positional Parameters:
-        -- An array of column-specifications
+
+        -- A list of column-specifications.
+
+           A column-specification can be a ColSpec, or a string. In
+           either case, the column-name is a interpretted as
+           schema-name '.'  attr-name. The schema-name portion will be
+           used to discriminate between schema present in the
+           container. The column-name schema-name '.*' and '*' are
+           wildcards to select all columns in a schema and all columns
+           in the from_ keyword parameter respectively.
 
         Keyword Arguments:
+
         from_     -- An array of schema name being queried (default is all)
+
         where     -- An array of query conditions
+
         order_by  -- The name of the attribute by which to order results
+                     If the order_by keyword is not specified, the
+                     first column in the column-specification is
+                     presumed to be the key. If this column is not
+                     indexed, an exception will be thrown.
+
         unique    -- Return only a single result for each matching
                      the where condition
-
-        The 'attr' keyword parameter is an array of attribute
-        (i.e. column) names to include in the record.  The 'schema'
-        keyword is an array of strings specifying the schema
-        (i.e. tables) containing the attributes in the 'attr'
-        array. The 'where' argument is an array of filter criteria
-        (i.e. conditions) for the records to be returned.
 
         Examples:
 
             ds = SosDataSource()
             ds.config(path = '/DATA15/orion/ldms_data')
             ds.select([
-                       'meminfo.timestamp', 'meminfo.job_id', 'meminfo.component_id',
-                       'meminfo.MemFree', 'meminfo.MemAvailable',
-                       'vmstat.nr_free_pages'
+                       'meminfo[timestamp]', 'meminfo[job_id]', 'meminfo[component_id]',
+                       'meminfo[MemFree]', 'meminfo[MemAvailable]',
+                       'vmstat[nr_free_pages]'
                       ],
                       where    = [
                                    ('job_id', Sos.COND_GT, 1),
@@ -604,6 +507,7 @@ class SosDataSource(DataSource):
                                  ],
                       order_by = 'job_comp_time'
                      )
+
         """
         self.query_ = Sos.Query(self.cont)
         self.query_.select(columns, where=where, from_ = from_, order_by = order_by, unique = unique)
@@ -622,7 +526,7 @@ class SosDataSource(DataSource):
             return self.query_.query(inputer, reset=reset, wait=wait)
         return 0
 
-    def get_results(self, interval_ms=None, limit=None, wait=None, reset=True, keep=0,
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
 
         """Return a DataSet from the DataSource
@@ -655,11 +559,56 @@ class SosDataSource(DataSource):
             limit = self.window
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
+        if inputer is None:
+            inputer = Sos.QueryInputer(self.query_, limit, start=keep)
         count = self.query_.query(inputer, reset=reset, wait=wait)
-        if not interval_ms:
-            result = self.query_.to_dataset()
-        else:
-            result = self.query_.to_timeseries(interval_ms=interval_ms, max_array=limit)
+        result = self.query_.to_dataset()
+        if keep:
+            last_row = self.last_result.get_series_size() - keep
+            for row in range(0, keep):
+                for col in range(0, result.series_count):
+                    result[col, row] = self.last_result[col, last_row]
+                last_row += 1
+        self.last_result = result
+        return self.last_result
+
+    def get_df(self, limit=None, wait=None, reset=True, keep=0, index=None):
+
+        """Return a Pandas DataFrame from the DataSource
+
+        The get_df() method returns the data identified by the
+        select() method as a Pandas DataFrame
+
+        Keyword Parameters:
+
+        limit -- The maximum number of records to return. This limits
+                 how large each series in the resulting DataFrame. If
+                 not specified, the limit is DataSource.window_size
+
+        index -- The column name to use as the DataFrame index
+
+        wait  -- A wait-specification that indicates how to wait for
+                 results if the data available is less than
+                 'limit'. See Sos.Query.query() for more information.
+
+        reset -- Set to True to re-start the query at the beginning of
+                 the matching data.
+
+        keep  -- Return [0..keep] as the [N-keep, N] values from the
+                 previous result. This is useful when the data from
+                 the previous 'window' needs to be combined with the
+                 the next window, for example when doing 'diff' over a
+                 large series of input data, the last sample from the
+                 previous window needs to be subtracted from the first
+                 sample of the next window (see Transform.diff())
+        """
+        if limit is None:
+            limit = self.window
+        if keep and self.last_result is None:
+            raise ValueError("Cannot keep results from an empty previous result.")
+        inputer = None
+        count = self.query_.query(inputer, reset=reset, wait=wait)
+        result = self.query_.to_dataframe()
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):

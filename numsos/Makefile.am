@@ -3,6 +3,16 @@ PY_INCLUDES = -I$(srcdir)/../include \
 	   -I$(srcdir)/../src \
 	   -I$(top_srcdir)/ods/include \
 	   -I$(NUMPY_INCLUDE_PATH)
+
+pkgpythondir=${pythondir}/numsos
+pkgpython_PYTHON = __init__.py \
+	Csv.py \
+	DataSource.py \
+	DataSink.py \
+	Stack.py \
+	Transform.py \
+	ArgParse.py
+
 pkgpyexec_LTLIBRARIES = Inputer.la
 
 Inputer_la_SOURCES = Inputer.pyx
@@ -17,12 +27,3 @@ Inputer.c: Inputer.pyx
 	echo PYTHON_LDFLAGS are "$(PYTHON_LDFLAGS)"
 	cython --gdb $< -o $@
 
-pkgpythondir=${pythondir}/numsos
-#	DataSet.py
-pkgpython_PYTHON = __init__.py \
-	Csv.py \
-	DataSource.py \
-	DataSink.py \
-	Stack.py \
-	Transform.py \
-	ArgParse.py
