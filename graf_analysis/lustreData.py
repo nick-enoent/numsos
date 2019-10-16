@@ -49,10 +49,12 @@ class lustreData(Analysis):
         except Exception as e:
             a, b, c = sys.exc_info()
             print(str(e) + ' '+str(c.tb_lineno))
-            return str(e) + ' '+str(c.tb_lineno)
+            return None, None
 
     def get_lustre_avg(self, metrics, threshold, meta=False):
         sumbytes, sum_ = self.sum_metrics(metrics)
+        if sumbytes is None:
+            return None
         ret_bps = []
         ret_jobs = []
         ret_name = []
