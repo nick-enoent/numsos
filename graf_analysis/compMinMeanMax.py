@@ -1,4 +1,4 @@
-import os, sys, traceback, operator, time
+import os, sys, traceback
 import datetime as dt
 from grafanaAnalysis import Analysis
 from grafanaFormatter import DataSetFormatter
@@ -18,7 +18,7 @@ class compMinMeanMax(Analysis):
         self.send = end
         self.maxDataPoints = maxDataPoints
 
-    def minMeanMax(self, metric, job_id):
+    def get_data(self, metric, job_id, params=None):
         metric = metric[0]
         if job_id == 0:
             return [ { 'target' : 'Error: Please specify valid job_id', 'datapoints' : [] } ]
@@ -26,14 +26,16 @@ class compMinMeanMax(Analysis):
         self.src.select(['component_id'],
                    from_ = [ self.schema ],
                    where = [
+                       [ 'job_id', Sos.COND_EQ, job_id ],
                        [ 'timestamp', Sos.COND_GE, self.start ],
-                       [ 'timestamp', Sos.COND_LE, self.send ],
+                       [ 'timestamp', Sos.COND_LE, self.send ]
                    ],
                    order_by = 'time_job_comp'
             )
         comps = self.src.get_results(limit=self.maxDataPoints)
         if not comps:
-            return None
+            return [ { 'target' : 'Error: component_id not found for Job '+str(job_id),
+                       'datapoints' : [] } ]
         else:
             compIds = np.unique(comps['component_id'].tolist())
         result = []
@@ -45,7 +47,8 @@ class compMinMeanMax(Analysis):
             )
         job = self.src.get_results()
         if job is None:
-            return None
+            return [ { 'target' : 'Error: Job '+str(job_id)+' not found in mt-slurm schema',
+                       'datapoints' : [] } ]
         job_start = job.array('job_start')[0]
         job_end = job.array('job_end')[0]
         datapoints = []
@@ -60,6 +63,7 @@ class compMinMeanMax(Analysis):
                        order_by = 'job_comp_time'
                 )
             inp = None
+
             # default for now is dataframe - will update with dataset vs dataframe option
             res = self.src.get_df()
             if res is None:
@@ -78,6 +82,7 @@ class compMinMeanMax(Analysis):
             ts = np.int_(ts.timestamp()*1000)
             tstamps.append(ts)
             i += 1
+
         min_ = DataSet()
         min_datapoints = np.min(datapoints, axis=0)
         min_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
@@ -96,4 +101,3 @@ class compMinMeanMax(Analysis):
         max_.append_array(len(tstamps), 'timestamp', tstamps)
         result.append({"target" : "max_"+str(metric), "datapoints" : max_.tolist() })
         return result
-

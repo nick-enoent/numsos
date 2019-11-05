@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 
 class lustreData(Analysis):
-    def __init__(self, cont, start, end, schema='Lustre_Client'):
+    def __init__(self, cont, start, end, schema='Lustre_Client', maxDataPoints=4096):
         self.start = start
         self.end = end
         self.schema = schema
@@ -20,12 +20,29 @@ class lustreData(Analysis):
                              'mt-slurm[job_start]', 'mt-slurm[job_end]' ]
         self.f = DataSetFormatter()
         self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
+        self.where_ = []
         if self.start > 0:
             self.where_.append(['timestamp', Sos.COND_GE, self.start])
         if self.end > 0:
             self.where_.append(['timestamp', Sos.COND_LE, self.end])
 
-    def sum_metrics(self, metrics):
+    def get_data(self, metrics, job_id=None, params=None):
+        if params is not None:
+            if 'threshold' in params:
+               threshold = int(params.split('=')[1])
+            else:
+                threshold = 5
+            if 'meta' in params:
+                _meta = True
+            else:
+                _meta = False
+        else:
+            threshold = 5
+            _meta = False
+        res = self.get_lustre_avg(metrics, threshold, meta=_meta)
+        return res
+
+    def _sum_metrics(self, metrics):
         try:
             ''' Return tuple of (metric_per_second nd array, dataset) '''
             self.src.select([ 'job_id' ] + metrics,
@@ -52,7 +69,7 @@ class lustreData(Analysis):
             return None, None
 
     def get_lustre_avg(self, metrics, threshold, meta=False):
-        sumbytes, sum_ = self.sum_metrics(metrics)
+        sumbytes, sum_ = self._sum_metrics(metrics)
         if sumbytes is None:
             return None
         ret_bps = []
@@ -63,6 +80,8 @@ class lustreData(Analysis):
         ret_user = []
         i = 0
         while i < threshold:
+            if len(sumbytes) < 1:
+                break
             index, val = max(enumerate(sumbytes), key=operator.itemgetter(1))
             jids = sum_.array('job_id')
             self.src.select(self.job_metrics,
@@ -71,6 +90,8 @@ class lustreData(Analysis):
                             order_by = 'job_rank_time'
                 )
             job = self.src.get_results()
+            if job is None:
+                return None
             ret_bps.append(val / (job.array('job_end')[0] - job.array('job_start')[0]))
             ret_jobs.append(sum_.array('job_id')[index])
             ret_name.append(job.array('job_name')[0])
