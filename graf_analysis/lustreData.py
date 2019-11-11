@@ -60,7 +60,7 @@ class lustreData(Analysis):
                                  keep=['job_id'], xfrm_suffix='')
 
             job_sums = np.zeros(sum_.get_series_size())
-            for m in sum_.series[1:]:
+            for m in sum_.series:
                 job_sums += sum_.array(m)
             return job_sums, sum_
         except Exception as e:
@@ -79,21 +79,23 @@ class lustreData(Analysis):
         ret_end = []
         ret_user = []
         i = 0
+        sumbytes = np.delete(sumbytes, 0)
+        jids = sum_.array('job_id')[1:]
         while i < threshold:
             if len(sumbytes) < 1:
                 break
             index, val = max(enumerate(sumbytes), key=operator.itemgetter(1))
-            jids = sum_.array('job_id')
-            self.src.select(self.job_metrics,
+            self.src.select(self.job_metrics + ['job_id'],
                             from_ = [ 'mt-slurm' ],
-                            where = [ [ 'job_id' , Sos.COND_EQ, sum_.array('job_id')[index] ] ],
+                            where = [ [ 'job_id' , Sos.COND_EQ, jids[index] ] ],
                             order_by = 'job_rank_time'
                 )
             job = self.src.get_results()
             if job is None:
                 return None
             ret_bps.append(val / (job.array('job_end')[0] - job.array('job_start')[0]))
-            ret_jobs.append(sum_.array('job_id')[index])
+            print(jids[index])
+            ret_jobs.append(job.array('job_id')[0])
             ret_name.append(job.array('job_name')[0])
             ret_start.append(job.array('job_start')[0]*1000)
             ret_end.append(job.array('job_end')[0]*1000)
