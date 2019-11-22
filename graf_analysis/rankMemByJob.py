@@ -194,7 +194,7 @@ class rankMemByJob(Analysis):
             ''' Check there are enough entries to slice '''
             i = 0
             while i < threshold:
-                _max = self.xfrm.max([ 'Mem_Used_Ratio' ], group_name='job_id',
+                _max = self.xfrm.max([ 'Mem_Used_Ratio' ], group_name='component_id',
                                      keep=['timestamp', 'job_id', 'component_id'])
                 if i == 0:
                     res = _max
@@ -226,7 +226,7 @@ class rankMemByJob(Analysis):
         if memUsedRatio.get_series_size() > threshold:
             i = 0
             while i < threshold:
-                _min = self.xfrm.min([ 'Mem_Used_Ratio' ], group_name='job_id',
+                _min = self.xfrm.min([ 'Mem_Used_Ratio' ], group_name='component_id',
                                      keep=['timestamp', 'job_id', 'component_id'])
                 if i == 0:
                     res = _min

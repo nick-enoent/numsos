@@ -6,6 +6,7 @@ from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
 from sosdb import Sos
+import time
 import pandas as pd
 import numpy as np
 
@@ -19,8 +20,8 @@ class lustreData(Analysis):
         self.job_metrics = [ 'mt-slurm[job_name]', 'mt-slurm[job_user]',
                              'mt-slurm[job_start]', 'mt-slurm[job_end]' ]
         self.f = DataSetFormatter()
-        self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
         self.where_ = []
+        self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
         if self.start > 0:
             self.where_.append(['timestamp', Sos.COND_GE, self.start])
         if self.end > 0:
@@ -56,9 +57,12 @@ class lustreData(Analysis):
                 resp = self.xfrm.next()
                 if resp is not None:
                     self.xfrm.concat()
-            sum_ = self.xfrm.sum(metrics, group_name='job_id',
+            
+            sum_ = self.xfrm.max(metrics, group_name='job_id',
                                  keep=['job_id'], xfrm_suffix='')
 
+            sum_ = self.xfrm.sum(metrics, group_name='job_id',
+                                 keep=['job_id'], xfrm_suffix='')
             job_sums = np.zeros(sum_.get_series_size())
             for m in sum_.series:
                 job_sums += sum_.array(m)
@@ -78,6 +82,7 @@ class lustreData(Analysis):
         ret_start = []
         ret_end = []
         ret_user = []
+        ret_state = []
         i = 0
         sumbytes = np.delete(sumbytes, 0)
         jids = sum_.array('job_id')[1:]
@@ -93,12 +98,18 @@ class lustreData(Analysis):
             job = self.src.get_results()
             if job is None:
                 return None
-            ret_bps.append(val / (job.array('job_end')[0] - job.array('job_start')[0]))
-            print(jids[index])
+            if job.array('job_end')[0] < 1:
+                job_end = time.time()
+                ret_end.append(job_end*1000)
+                ret_state.append("In process")
+            else:
+                job_end = job.array('job_end')[0]
+                ret_end.append(job.array('job_end')[0]*1000)
+                ret_state.append("Completed")
+            ret_bps.append(val / (job_end - job.array('job_start')[0]))
             ret_jobs.append(job.array('job_id')[0])
             ret_name.append(job.array('job_name')[0])
-            ret_start.append(job.array('job_start')[0]*1000)
-            ret_end.append(job.array('job_end')[0]*1000)
+            ret_start.append(job.array('job_start')[0] * 1000)
             ret_user.append(job.array('job_user')[0])
 
             # remove job with highest bps from list of jobs
@@ -115,5 +126,6 @@ class lustreData(Analysis):
         res.append_array(len(ret_user), 'job_user', ret_user)
         res.append_array(len(ret_start), 'job_start', ret_start)
         res.append_array(len(ret_end), 'job_end', ret_end)
+        res.append_array(len(ret_state), 'job_state', ret_state)
         res = self.f.fmt_table(res)
         return res

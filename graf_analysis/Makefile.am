@@ -6,8 +6,8 @@ PY_INCLUDES = -I$(srcdir)/../include \
 pkggrafanadir = ${pythondir}/graf_analysis
 pkggrafana_PYTHON = __init__.py \
 		compMinMeanMax.py \
+		compMinMeanMaxRate.py \
 		grafanaAnalysis.py \
 		grafanaFormatter.py \
 		rankMemByJob.py \
 		lustreData.py
-
