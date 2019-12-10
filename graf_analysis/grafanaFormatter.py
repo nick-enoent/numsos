@@ -25,7 +25,19 @@ class RowIter:
         return res
 
 class DataSetFormatter:
-    def fmt_table(self, data):
+    def __init__(self, data, fmt):
+         self.result = []
+         self.data = data
+         self.fmt = fmt
+         self.fmt_data = {
+             'table' : self.fmt_table,
+             'time_series' : self.fmt_plot
+         }
+
+    def ret_json(self):
+         return self.fmt_data[self.fmt]()
+        
+    def fmt_table(self):
         """
         [
         {
@@ -41,18 +53,27 @@ class DataSetFormatter:
         ]
         """
         tbl_dict = { "type" : "table" }
-        tbl_dict['columns'] = [ { "text" : colName } for colName in data.series ]
+        tbl_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
         rows = []
-        for row in RowIter(data):
+        for row in RowIter(self.data):
             rows.append(row)
         tbl_dict['rows'] = rows
         return [ tbl_dict ]
 
-    def fmt_plot(self, data):
-        return None
+    def fmt_plot(self):
+        # timestamp is always last series
+        for series in self.data.series[:-1]:
+            ds = DataSet()
+            ds.append_series(self.data, series_list=[series, 'timestamp'])
+            plt_dict = { "target" : series }
+            plt_dict['datapoints'] = ds.tolist()
+            self.result.append(plt_dict)
+            del ds
+        return self.result
+
 class DataFrameFormatter:
     def fmt_table(self, data):
-        return 
+        return None
 
     def fmt_plot(self, data):
         return None

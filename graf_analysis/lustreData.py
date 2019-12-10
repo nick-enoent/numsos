@@ -1,7 +1,6 @@
 import os, sys, traceback, operator, time
 import datetime as dt
 from grafanaAnalysis import Analysis
-from grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -19,7 +18,6 @@ class lustreData(Analysis):
         self.src.config(cont=cont)
         self.job_metrics = [ 'mt-slurm[job_name]', 'mt-slurm[job_user]',
                              'mt-slurm[job_start]', 'mt-slurm[job_end]' ]
-        self.f = DataSetFormatter()
         self.where_ = []
         self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
         if self.start > 0:
@@ -116,16 +114,15 @@ class lustreData(Analysis):
             sumbytes = np.delete(sumbytes, index)
             jids = np.delete(jids, index)
             i += 1
-        res = DataSet()
+        res_ = DataSet()
         if not meta:
-            res.append_array(len(ret_bps), 'bps', ret_bps)
+            res_.append_array(len(ret_bps), 'bps', ret_bps)
         else:
-            res.append_array(len(ret_bps), 'ios', ret_bps)
-        res.append_array(len(ret_jobs), 'job_id', ret_jobs)
-        res.append_array(len(ret_name), 'job_name', ret_name)
-        res.append_array(len(ret_user), 'job_user', ret_user)
-        res.append_array(len(ret_start), 'job_start', ret_start)
-        res.append_array(len(ret_end), 'job_end', ret_end)
-        res.append_array(len(ret_state), 'job_state', ret_state)
-        res = self.f.fmt_table(res)
-        return res
+            res_.append_array(len(ret_bps), 'ios', ret_bps)
+        res_.append_array(len(ret_jobs), 'job_id', ret_jobs)
+        res_.append_array(len(ret_name), 'job_name', ret_name)
+        res_.append_array(len(ret_user), 'job_user', ret_user)
+        res_.append_array(len(ret_start), 'job_start', ret_start)
+        res_.append_array(len(ret_end), 'job_end', ret_end)
+        res_.append_array(len(ret_state), 'job_state', ret_state)
+        return res_

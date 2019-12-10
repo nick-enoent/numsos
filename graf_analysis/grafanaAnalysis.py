@@ -3,7 +3,6 @@ import datetime as dt
 import time
 import os, sys, traceback, operator
 from sosdb import Sos
-from grafanaFormatter import DataSetFormatter
 from sosdb.DataSet import DataSet
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
@@ -19,7 +18,6 @@ class Analysis(object):
         self.end = end
         self.src = SosDataSource()
         self.src.config(cont=self.cont)
-        self.f = DataSetFormatter()
         self.mdp = maxDataPoints
 
 class papiAnalysis(Analysis):
@@ -30,7 +28,6 @@ class papiAnalysis(Analysis):
         self.end = end
         self.src = SosDataSource()
         self.src.config(cont=self.cont)
-        self.f = DataSetFormatter()
         self.mdp = maxDataPoints
         self.job_status_str = {
             1 : "running",
@@ -95,33 +92,32 @@ class papiAnalysis(Analysis):
                 [ 'PAPI_TOT_INS[timestamp]',
                   'PAPI_TOT_INS[component_id]',
                   'PAPI_TOT_INS[job_id]',
-                  'PAPI_TOT_INS[rank]' ] + event_name_map.keys(),
-                       from_    = event_name_map.keys(),
+                  'PAPI_TOT_INS[rank]' ] + self.event_name_map.keys(),
+                       from_    = self.event_name_map.keys(),
                        where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
                                 ],
                        order_by = 'job_rank_time')
 
-            self.xfrm = Transform(src, None)
-            res = self.xfrm.begin()
+            xfrm = Transform(src, None)
+            res = xfrm.begin()
             if res is None:
                 # Job was too short to record data
-                log.write('getPapiDerivedMetrics: no data for job_id {0}'.format(job_id))
                 return (None, None)
 
             while res is not None and res.get_series_size() == 8192:
-                res = self.xfrm.next(count=8192)
+                res = xfrm.next(count=8192)
                 if res is not None:
                     # concatenate TOP and TOP~1
-                    self.xfrm.concat()
+                    xfrm.concat()
 
             # result now on top of stack
-            result = self.xfrm.pop()                  # result on top
+            result = xfrm.pop()                  # result on top
             # "Normalize" the event names
-            for name in event_name_map:
-                result.rename(name, event_name_map[name])
+            for name in self.event_name_map:
+                result.rename(name, self.event_name_map[name])
 
-            self.xfrm.push(result)
-            job = self.xfrm.pop()
+            xfrm.push(result)
+            job = xfrm.pop()
 
             # cpi = tot_cyc / tot_ins
             job <<= job['tot_cyc'] / job['tot_ins'] >> 'cpi'
@@ -169,11 +165,11 @@ class papiAnalysis(Analysis):
             # store
             job <<= job['sr_ins'] / job['tot_ins'] >> 'store_rate'
 
-            return job
+            return xfrm, job
 
         except Exception as e:
             a, b, c = sys.exc_info()
-            log.write('derivedMetrics '+str(e)+' '+str(c.tb_lineno))
+            print('derivedMetrics '+str(e)+' '+str(c.tb_lineno))
             return None
 
     def papi_rank_stats(self, xfrm, job):
@@ -215,5 +211,5 @@ class papiAnalysis(Analysis):
             return (events, mins, maxs, stats)
         except Exception as e:
             a, b, c = sys.exc_info()
-            log.write('papiRankStats '+str(e)+' '+str(c.tb_lineno))
+            print('papiRankStats '+str(e)+' '+str(c.tb_lineno))
             return (None, None, None, None)

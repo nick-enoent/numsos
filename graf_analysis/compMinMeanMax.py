@@ -1,7 +1,6 @@
 import os, sys, traceback
 import datetime as dt
 from grafanaAnalysis import Analysis
-from grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -83,21 +82,12 @@ class compMinMeanMax(Analysis):
             tstamps.append(ts)
             i += 1
 
-        min_ = DataSet()
+        res_ = DataSet()
         min_datapoints = np.min(datapoints, axis=0)
-        min_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
-        min_.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({ "target" : "min_"+str(metric), "datapoints" : min_.tolist() })
-
-        mean = DataSet()
         mean_datapoints = np.mean(datapoints, axis=0)
-        mean.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
-        mean.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({"target" : "mean_"+str(metric), "datapoints" : mean.tolist() })
-
-        max_ = DataSet()
         max_datapoints = np.max(datapoints, axis=0)
-        max_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
-        max_.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({"target" : "max_"+str(metric), "datapoints" : max_.tolist() })
-        return result
+        res_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
+        res_.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
+        res_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
+        res_.append_array(len(tstamps), 'timestamp', tstamps)
+        return res_

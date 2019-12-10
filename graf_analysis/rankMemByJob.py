@@ -7,7 +7,6 @@ from numsos.Transform import Transform
 from grafanaAnalysis import Analysis
 import numpy as np
 import pandas as pd
-from grafanaFormatter import DataSetFormatter
 
 class rankMemByJob(Analysis):
     def __init__(self, cont, start, end, schema='meminfo', maxDataPoints=4096):
@@ -18,7 +17,6 @@ class rankMemByJob(Analysis):
         self.maxDataPoints = 4096
         self.src = SosDataSource()
         self.src.config(cont=cont)
-        self.f = DataSetFormatter()
 
     def get_data(self, metricNames, job_id, params):
         self.metrics = [ 'job_id', 'component_id', 'timestamp', 'MemTotal', 'MemFree' ]
@@ -109,7 +107,6 @@ class rankMemByJob(Analysis):
         res = res.concat(_res)
         res.append_array(7, "Analysis", ["Min", "Max", "Stdd-2", "Stdd-1", "Mean", "Stdd+1", "Stdd+2" ])
         res.append_array(7, "Count", counts)
-        res = self.f.fmt_table(res)
         return res
 
     def _get_high_mem(self, threshold):
@@ -141,7 +138,6 @@ class rankMemByJob(Analysis):
                 i += 1
         else:
             res = self.xfrm.pop()
-        res = self.f.fmt_table(res)
         return res
 
     def _get_low_mem(self, threshold):
@@ -173,7 +169,6 @@ class rankMemByJob(Analysis):
                 i += 1
         else:
             res = self.xfrm.pop()
-        res = self.f.fmt_table(res)
         return res
 
     def _get_idle_high_mem(self, threshold):
@@ -206,7 +201,6 @@ class rankMemByJob(Analysis):
         else:
             ''' Return all components '''
             res = self.xfrm.pop()
-        res = self.f.fmt_table(res)
         return res
         
     def _get_idle_low_mem(self, threshold):
@@ -237,5 +231,4 @@ class rankMemByJob(Analysis):
                 i += _min.get_series_size()
         else:
             res = self.xfrm.pop()
-        res = self.f.fmt_table(res)
         return res

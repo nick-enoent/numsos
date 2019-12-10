@@ -1,7 +1,6 @@
 import os, sys, traceback
 import datetime as dt
 from grafanaAnalysis import Analysis
-from grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -21,19 +20,19 @@ class compMinMeanMaxRate(Analysis):
     def get_data(self, metric, job_id, params=None):
         metric = metric[0]
         if job_id == 0:
-            return [ { 'target' : 'Error: Please specify valid job_id', 'datapoints' : [] } ]
+            return None
         # Get components with data during given time range
         self.src.select(['component_id'],
                    from_ = [ self.schema ],
                    where = [
-                       [ 'job_id', Sos.COND_EQ, job_id ]
+                       [ 'job_id', Sos.COND_EQ, job_id ],
+                       [ 'timestamp', Sos.COND_GE, self.start ]
                    ],
-                   order_by = 'time_job_comp'
+                   order_by = 'job_time_comp'
             )
-        comps = self.src.get_results(limit=1000000)
+        comps = self.src.get_results(limit=4096)
         if not comps:
-            return [ { 'target' : 'Error: component_id not found for Job '+str(job_id)+' within time range',
-                       'datapoints' : [] } ]
+            return None
         else:
             compIds = np.unique(comps['component_id'].tolist())
         result = []
@@ -45,8 +44,7 @@ class compMinMeanMaxRate(Analysis):
             )
         job = self.src.get_results()
         if job is None:
-            return [ { 'target' : 'Error: Job '+str(job_id)+' not found in mt-slurm schema',
-                       'datapoints' : [] } ]
+            return None
         job_start = job.array('job_start')[0]
         job_end = job.array('job_end')[0]
         datapoints = []
@@ -88,21 +86,13 @@ class compMinMeanMaxRate(Analysis):
             tstamps.append(ts)
             i += 1
 
-        min_ = DataSet()
+        res_ = DataSet()
         min_datapoints = np.min(datapoints, axis=0)
-        min_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
-        min_.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({ "target" : "min_"+str(metric), "datapoints" : min_.tolist() })
-
-        mean = DataSet()
         mean_datapoints = np.mean(datapoints, axis=0)
-        mean.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
-        mean.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({"target" : "mean_"+str(metric), "datapoints" : mean.tolist() })
-
-        max_ = DataSet()
         max_datapoints = np.max(datapoints, axis=0)
-        max_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
-        max_.append_array(len(tstamps), 'timestamp', tstamps)
-        result.append({"target" : "max_"+str(metric), "datapoints" : max_.tolist() })
-        return result
+        res_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
+        res_.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
+        res_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
+        res_.append_array(len(tstamps), 'timestamp', tstamps)
+
+        return res_
