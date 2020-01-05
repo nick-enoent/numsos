@@ -51,6 +51,8 @@ class lustreData(Analysis):
                 )
             self.xfrm = Transform(self.src, None)
             resp = self.xfrm.begin()
+            if resp is None:
+                return None
             while resp is not None:
                 resp = self.xfrm.next()
                 if resp is not None:

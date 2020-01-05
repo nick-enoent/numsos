@@ -52,6 +52,9 @@ class DataSetFormatter:
         }
         ]
         """
+        if self.data is None:
+            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
+
         tbl_dict = { "type" : "table" }
         tbl_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
         rows = []
@@ -62,6 +65,9 @@ class DataSetFormatter:
 
     def fmt_plot(self):
         # timestamp is always last series
+        if self.data is None:
+            return [ { "target" : "", "datapoints" : [] } ]
+
         for series in self.data.series[:-1]:
             ds = DataSet()
             ds.append_series(self.data, series_list=[series, 'timestamp'])

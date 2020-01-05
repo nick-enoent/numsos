@@ -9,7 +9,7 @@ from sosdb import Sos
 import pandas as pd
 import numpy as np
 
-class allMinMeanMaxRate(Analysis):
+class meanMetricRate(Analysis):
     def __init__(self, cont, start, end, schema='Lustre_Client', maxDataPoints=4096):
         self.schema = schema
         self.src = SosDataSource()
