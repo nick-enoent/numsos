@@ -17,7 +17,7 @@ class lustreData(Analysis):
         self.src = SosDataSource()
         self.src.config(cont=cont)
         self.job_metrics = [ 'mt-slurm[job_name]', 'mt-slurm[job_user]',
-                             'mt-slurm[job_start]', 'mt-slurm[job_end]' ]
+                             'mt-slurm[job_start]', 'mt-slurm[job_end]', 'mt-slurm[job_size]' ]
         self.where_ = []
         self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
         if self.start > 0:
@@ -83,6 +83,7 @@ class lustreData(Analysis):
         ret_end = []
         ret_user = []
         ret_state = []
+        ret_size = []
         i = 0
         sumbytes = np.delete(sumbytes, 0)
         jids = sum_.array('job_id')[1:]
@@ -108,6 +109,7 @@ class lustreData(Analysis):
                 ret_state.append("Completed")
             ret_bps.append(val / (job_end - job.array('job_start')[0]))
             ret_jobs.append(job.array('job_id')[0])
+            ret_size.append(job.array('job_size')[0])
             ret_name.append(job.array('job_name')[0])
             ret_start.append(job.array('job_start')[0] * 1000)
             ret_user.append(job.array('job_user')[0])
@@ -122,6 +124,7 @@ class lustreData(Analysis):
         else:
             res_.append_array(len(ret_bps), 'ios', ret_bps)
         res_.append_array(len(ret_jobs), 'job_id', ret_jobs)
+        res_.append_array(len(ret_size), 'ranks', ret_size)
         res_.append_array(len(ret_name), 'job_name', ret_name)
         res_.append_array(len(ret_user), 'job_user', ret_user)
         res_.append_array(len(ret_start), 'job_start', ret_start)
