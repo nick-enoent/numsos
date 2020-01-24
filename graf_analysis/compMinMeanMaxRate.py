@@ -67,30 +67,23 @@ class compMinMeanMaxRate(Analysis):
             rs = series.resample(str(bin_width)+'S').fillna("backfill")
             dps = rs.values.flatten()
             dps = np.insert(dps, 0, 0)
-            if len(dps) > 1:
-                dps = np.diff(dps)
+            #if len(dps) > 1:
+            #    dps = np.diff(dps)
+            dps = np.diff(dps)
             datapoints.append(dps)
             tstamp = rs.index
         i = 0
-        tstamps = []
-        if len(tstamp) > 1:
-            x = 1
-        else:
-            x = 0
-        while i < len(tstamp[x:]):
+        tstamps = [] 
+        while i < len(tstamp):
             ts = pd.Timestamp(tstamp[i])
             ts = np.int_(ts.timestamp()*1000)
             tstamps.append(ts)
             i += 1
+        tstamps = np.array(tstamps)
         res_ = DataSet()
-        if len(datapoints) > 1:
-            min_datapoints = np.min(datapoints, axis=0)
-            mean_datapoints = np.mean(datapoints, axis=0)
-            max_datapoints = np.max(datapoints, axis=0)
-        else:
-            min_datapoints = datapoints
-            mean_datapoints = datapoints
-            max_datapoints = datapoints
+        min_datapoints = np.min(datapoints, axis=0)
+        mean_datapoints = np.mean(datapoints, axis=0)
+        max_datapoints = np.max(datapoints, axis=0)
         res_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
         res_.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
         res_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
