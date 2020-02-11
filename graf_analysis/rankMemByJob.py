@@ -19,7 +19,7 @@ class rankMemByJob(Analysis):
         self.src.config(cont=cont)
 
     def get_data(self, metricNames=None, job_id=None, params=None):
-        self.metrics = [ 'job_id', 'component_id', 'timestamp', 'MemTotal', 'MemFree' ]
+        self.metrics = [ 'job_id', 'component_id', 'timestamp', 'MemTotal', 'MemFree']
         try:
             if params is None:
                 res = self._job_summary(job_id)
@@ -60,6 +60,7 @@ class rankMemByJob(Analysis):
         memUsedRatio <<= data['timestamp']
         memUsedRatio <<= data['job_id']
         memUsedRatio <<= data['component_id']
+        #memUsedRatio <<= data['job_size']
 
         self.xfrm.push(memUsedRatio)
         return memUsedRatio
@@ -80,8 +81,7 @@ class rankMemByJob(Analysis):
     def _job_summary(self, job_id):
         ''' Get summarized information about jobs across components '''
         where_ = [ [ 'job_id', Sos.COND_EQ, job_id ] ]
-        # order_by = 'job_comp_time'
-        self.src.select(self.metrics,
+        self.src.select(self.metrics + 'job_size',
                         from_ = [ self.schema ],
                         where = where_,
                         order_by = 'time_job_comp'
