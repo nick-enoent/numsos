@@ -617,3 +617,15 @@ class SosDataSource(DataSource):
                 last_row += 1
         self.last_result = result
         return self.last_result
+
+def datasource(name):
+    if name.upper() == "SOS":
+        return SosDataSource()
+
+    if name.upper() == "CSV":
+        return CsvDataSource()
+
+    if name.upper() == "INFLUX":
+        return InfluxDataSource()
+
+    raise NotImplementedError(name + " is not implemented")
