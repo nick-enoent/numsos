@@ -63,7 +63,7 @@ class Transform(object):
             return self._next(count=count, wait=wait, keep=keep, reset=False, interval_ms=self.interval_ms)
         return self._next(count=count, wait=wait, keep=keep, reset=False)
 
-    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None):
+    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None, axis=-1):
         """Compute the difference of a series
 
         Pop the top of the stack and compute the difference, i.e.
@@ -100,33 +100,57 @@ class Transform(object):
         """
         if group_name:
             res = self._by_group(series_list, group_name, xfrm_suffix, np.diff,
-                                 grp_len_fn=lambda src : len(src) - 1, keep=keep)
+                                 xfrm_len_fn=lambda src : len(src) - 1,
+                                 keep=keep, axis=axis)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.diff,
-                               xfrm_len_fn=lambda src : src.get_series_size() - 1)
+                               xfrm_len_fn=lambda src : src.get_series_size() - 1,
+                               axis=axis)
         return self.stack.push(res)
 
-    def _by_row(self, series_list, xfrm_suffix, xfrm_fn, xfrm_fn_args=None,
-                xfrm_len_fn=lambda src : 1):
+    def _clone(self, inp, src_names, dst_names, res_size, xfrm_len_fn, axis):
+        types = {}
+        shapes = {}
+        for col in range(0, len(dst_names)):
+            ser = src_names[col]
+            src = inp.array(ser)
+            types[dst_names[col]] = src.dtype
+            if src.ndim > 1:
+                if axis == 1:
+                    cols = xfrm_len_fn(src[0])
+                    if cols > 1:
+                        shapes[dst_names[col]] = ( src.shape[0], cols )
+                    else:
+                        shapes[dst_names[col]] = ( src.shape[0] )
+                else:
+                    shapes[dst_names[col]] = src.shape
+            else:
+                shapes[dst_names[col]] = src.shape
+
+        return DataSet().new(res_size, dst_names, shapes=shapes, types=types)
+
+    def _by_row(self, series_list, xfrm_suffix, xfrm_fn,
+                xfrm_len_fn=lambda src : 1, **kwargs):
         series_names = [ ser + xfrm_suffix for ser in series_list ]
         inp = self.stack.pop()
-        series_len = xfrm_len_fn(inp)
 
-        types = {}
-        for col in range(0, len(series_list)):
-            src = inp.array(series_list[col])
-            types[series_names[col]] = src.dtype
+        if 'axis' in kwargs:
+            axis = kwargs['axis']
+        else:
+            axis = 0
 
-        res = DataSet().new(series_len, series_names, types=types)
+        if axis == 0:
+            series_len = xfrm_len_fn(inp)
+        else:
+            series_len = inp.get_series_size()
+
+        res = self._clone(inp, series_list, series_names, series_len, xfrm_len_fn, axis)
 
         col = 0
         for ser in series_list:
             src = inp.array(ser)[0:inp.series_size]
             nda = res.array(col)
-            if xfrm_fn_args is None:
-                nda[:] = xfrm_fn(src)
-            else:
-                nda[:] = xfrm_fn(src, xfrm_fn_args)
+            nda[:] = xfrm_fn(src, **kwargs)
             col += 1
         return res
 
@@ -172,7 +196,8 @@ class Transform(object):
             self._for_each(series_list, xfrm_fn, [ v ])
 
     def _by_group(self, series_list, group_name, xfrm_suffix, xfrm_fn,
-                  xfrm_fn_args=None, grp_len_fn=lambda src : 1, keep=None):
+                  xfrm_len_fn=lambda src : 1, keep=None,
+                  **kwargs):
         """Group data by a series value
 
         The transform function is performed over each group of data
@@ -194,7 +219,7 @@ class Transform(object):
                    series_list
         keep -- Series in the input that are not in the series_list
                 that are to be retained in the output.
-
+        **kwargs -- passed to the xfrm_fn function.
         """
         if keep is None:
             keep = []
@@ -212,20 +237,21 @@ class Transform(object):
         res_size = 0
         grp_start = {}
         grp_len = {}
+        if 'axis' in kwargs:
+            axis = kwargs['axis']
+        else:
+            axis = 0            # over rows
         for value in uniq:
             grp_src = grp[grp == value]
-            grp_len[value] = grp_len_fn(grp_src)
+            if axis == 0:
+                grp_len[value] = xfrm_len_fn(grp_src)
+            else:
+                grp_len[value] = len(grp_src)
             grp_start[value] = res_size
             res_size += grp_len[value]
 
         # Allocate the result arrays.
-        types = {}
-        for col in range(0, len(dst_names)):
-            ser = src_names[col]
-            src = inp.array(ser)
-            types[dst_names[col]] = src.dtype
-
-        res = DataSet().new(res_size, dst_names, types=types)
+        res = self._clone(inp, src_names, dst_names, res_size, xfrm_len_fn, axis)
 
         # copy the group and keep data to the result. src_names and
         # dst_names are the same for keep columns
@@ -248,10 +274,7 @@ class Transform(object):
                 grp_dst = res.array(dst_names[col])
                 start_row = grp_start[value]
                 res_len = grp_len[value]
-                if xfrm_fn_args is None:
-                    grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src)
-                else:
-                    grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src, xfrm_fn_args)
+                grp_dst[start_row:start_row+res_len] = xfrm_fn(grp_src, **kwargs)
             col += 1
         return res
 
@@ -320,25 +343,25 @@ class Transform(object):
         self.stack.push(hist)
         return self.stack.push(edges)
 
-    def sum(self, series_list, group_name=None, xfrm_suffix="_sum", keep=None):
-        """Compute sums for series across rows
+    def sum(self, series_list, group_name=None, xfrm_suffix="_sum", keep=None, **kwargs):
+        """Compute sums for series across rows or columns
         """
         if group_name:
-            res = self._by_group(series_list, group_name, xfrm_suffix, np.sum, keep=keep)
+            res = self._by_group(series_list, group_name, xfrm_suffix, np.sum, keep=keep, **kwargs)
         else:
-            res = self._by_row(series_list, xfrm_suffix, np.sum)
+            res = self._by_row(series_list, xfrm_suffix, np.sum, **kwargs)
         return self.stack.push(res)
 
-    def mean(self, series_list, group_name=None, xfrm_suffix="_mean", keep=None):
+    def mean(self, series_list, group_name=None, xfrm_suffix="_mean", keep=None, **kwargs):
         """Compute mean for series across rows
         """
         if group_name:
-            res = self._by_group(series_list, group_name, xfrm_suffix, np.mean, keep=keep)
+            res = self._by_group(series_list, group_name, xfrm_suffix, np.mean, keep=keep, **kwargs)
         else:
-            res = self._by_row(series_list, xfrm_suffix, np.mean)
+            res = self._by_row(series_list, xfrm_suffix, np.mean, **kwargs)
         return self.stack.push(res)
 
-    def min(self, series_list, group_name=None, xfrm_suffix="_min", keep=None):
+    def min(self, series_list, group_name=None, xfrm_suffix="_min", keep=None, **kwargs):
         """Compute min for series across rows
         """
         if group_name:
@@ -366,13 +389,13 @@ class Transform(object):
             res[col,0] = inp.array(col)[row]
         return self.stack.push(res)
 
-    def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=None):
+    def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=None, **kwargs):
         """Compute max for series across rows
         """
         if group_name:
-            res = self._by_group(series_list, group_name, xfrm_suffix, np.max, keep=keep)
+            res = self._by_group(series_list, group_name, xfrm_suffix, np.max, keep=keep, **kwargs)
         else:
-            res = self._by_row(series_list, xfrm_suffix, np.max)
+            res = self._by_row(series_list, xfrm_suffix, np.max, **kwargs)
         return self.stack.push(res)
 
     def maxrow(self, series):
@@ -393,7 +416,7 @@ class Transform(object):
             res[col,0] = inp.array(col)[row]
         return self.stack.push(res)
 
-    def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=None):
+    def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=None, **kwargs):
         """Compute the standard deviation of a series
 
         See numpy.std for more information.
@@ -405,9 +428,9 @@ class Transform(object):
         group_by -- The name of a series by which data is grouped.
         """
         if group_name:
-            res = self._by_group(series_list, group_name, xfrm_suffix, np.std, keep=keep)
+            res = self._by_group(series_list, group_name, xfrm_suffix, np.std, keep=keep, **kwargs)
         else:
-            res = self._by_row(series_list, xfrm_suffix, np.std)
+            res = self._by_row(series_list, xfrm_suffix, np.std, **kwargs)
         return self.stack.push(res)
 
     def _per_row(self, series_list, xfrm_suffix, xfrm_fn):
@@ -423,7 +446,7 @@ class Transform(object):
         res.set_series_size(inp.get_series_size())
         return res
 
-    def gradient(self, series_list, group_name=None, xfrm_suffix="_grad", keep=None):
+    def gradient(self, series_list, group_name=None, xfrm_suffix="_grad", keep=None, **kwargs):
         """Compute the gradient of a series
 
         See numpy.gradient for more information.
@@ -432,10 +455,12 @@ class Transform(object):
         -- An array of series names
         """
         if group_name:
-            res = self._by_group(series_list, group_name, xfrm_suffix,
-                                 np.gradient, grp_len_fn=lambda src : len(src), keep=keep)
+            res = self._by_group(series_list, group_name, xfrm_suffix, np.gradient,
+                                 grp_len_fn=lambda src : len(src),
+                                 col_res_fn=lambda col : len(col),
+                                 keep=keep, **kwargs)
         else:
-            res = self._per_row(series_list, xfrm_suffix, np.gradient)
+            res = self._per_row(series_list, xfrm_suffix, np.gradient, **kwargs)
         return self.stack.push(res)
 
     def unique(self, series_name, result=None):
