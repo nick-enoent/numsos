@@ -63,7 +63,7 @@ class Transform(object):
             return self._next(count=count, wait=wait, keep=keep, reset=False, interval_ms=self.interval_ms)
         return self._next(count=count, wait=wait, keep=keep, reset=False)
 
-    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None, axis=-1):
+    def diff(self, series_list, group_name=None, xfrm_suffix="_diff", keep=None, **kwargs):
         """Compute the difference of a series
 
         Pop the top of the stack and compute the difference, i.e.
@@ -101,11 +101,11 @@ class Transform(object):
         if group_name:
             res = self._by_group(series_list, group_name, xfrm_suffix, np.diff,
                                  xfrm_len_fn=lambda src : len(src) - 1,
-                                 keep=keep, axis=axis)
+                                 keep=keep, **kwargs)
         else:
             res = self._by_row(series_list, xfrm_suffix, np.diff,
-                               xfrm_len_fn=lambda src : src.get_series_size() - 1,
-                               axis=axis)
+                               xfrm_len_fn=lambda src : len(src) - 1,
+                               **kwargs)
         return self.stack.push(res)
 
     def _clone(self, inp, src_names, dst_names, res_size, xfrm_len_fn, axis):
@@ -367,7 +367,7 @@ class Transform(object):
         if group_name:
             res = self._by_group(series_list, group_name, xfrm_suffix, np.min, keep=keep)
         else:
-            res = self._by_row(series_list, xfrm_suffix, np.min)
+            res = self._by_row(series_list, xfrm_suffix, np.min, **kwargs)
         return self.stack.push(res)
 
     def minrow(self, series):
@@ -433,19 +433,6 @@ class Transform(object):
             res = self._by_row(series_list, xfrm_suffix, np.std, **kwargs)
         return self.stack.push(res)
 
-    def _per_row(self, series_list, xfrm_suffix, xfrm_fn):
-        series_names = [ ser + xfrm_suffix for ser in series_list ]
-        inp = self.stack.pop()
-        res = DataSet().new(inp.get_series_size(), series_names)
-
-        col = 0
-        for ser in series_list:
-            src = inp.array(ser)[0:inp.series_size]
-            res[col] = xfrm_fn(src)
-            col += 1
-        res.set_series_size(inp.get_series_size())
-        return res
-
     def gradient(self, series_list, group_name=None, xfrm_suffix="_grad", keep=None, **kwargs):
         """Compute the gradient of a series
 
@@ -456,11 +443,12 @@ class Transform(object):
         """
         if group_name:
             res = self._by_group(series_list, group_name, xfrm_suffix, np.gradient,
-                                 grp_len_fn=lambda src : len(src),
-                                 col_res_fn=lambda col : len(col),
+                                 xfrm_len_fn=lambda src : len(src),
                                  keep=keep, **kwargs)
         else:
-            res = self._per_row(series_list, xfrm_suffix, np.gradient, **kwargs)
+            res = self._by_row(series_list, xfrm_suffix, np.gradient,
+                               xfrm_len_fn=lambda src : len(src),
+                               **kwargs)
         return self.stack.push(res)
 
     def unique(self, series_name, result=None):
