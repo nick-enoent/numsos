@@ -138,6 +138,7 @@ class Transform(object):
             axis = kwargs['axis']
         else:
             axis = 0
+            kwargs['axis'] = axis
 
         if axis == 0:
             series_len = xfrm_len_fn(inp)
@@ -241,6 +242,7 @@ class Transform(object):
             axis = kwargs['axis']
         else:
             axis = 0            # over rows
+            kwargs['axis'] = axis
         for value in uniq:
             grp_src = grp[grp == value]
             if axis == 0:
