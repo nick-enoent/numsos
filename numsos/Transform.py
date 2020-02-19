@@ -620,7 +620,7 @@ class Transform(object):
         s = self.stack.pop()
         if source is None:
             source = self.stack.pop()
-        res = s.concat(source)
+        res = source.concat(s)
         return self.stack.push(res)
 
     def push(self, res):
