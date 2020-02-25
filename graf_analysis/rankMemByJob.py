@@ -7,10 +7,11 @@ from numsos.Transform import Transform
 from grafanaAnalysis import Analysis
 import numpy as np
 import pandas as pd
+import sys
 
 class rankMemByJob(Analysis):
     def __init__(self, cont, start, end, schema='meminfo', maxDataPoints=4096):
-        self.schema = schema
+        self.schema = [ str(schema) ]
         self.cont = cont
         self.start = int(start)
         self.end = end
@@ -18,8 +19,11 @@ class rankMemByJob(Analysis):
         self.src = SosDataSource()
         self.src.config(cont=cont)
 
+        self.metrics = [ str(schema)+'[job_id]', str(schema)+'[component_id]',
+                         str(schema)+'[timestamp]', str(schema)+'[MemTotal]',
+                         str(schema)+'[MemAvailable]']
+
     def get_data(self, metricNames=None, job_id=None, params=None):
-        self.metrics = [ 'job_id', 'component_id', 'timestamp', 'MemTotal', 'MemFree']
         try:
             if params is None:
                 res = self._job_summary(job_id)
@@ -39,7 +43,9 @@ class rankMemByJob(Analysis):
                 else:
                     res = self._get_high_mem(threshold)
             return res
-        except:
+        except Exception as e:
+            a, b, c = sys.exc_info()
+            print(str(e)+' '+str(c.tb_lineno))
             return None
 
     def _mem_used_ratio(self):
@@ -51,16 +57,15 @@ class rankMemByJob(Analysis):
                 self.xfrm.concat()
         try:
             data = self.xfrm.top()
-        except:
-            return None
-
-        memUsedRatio = ((data['MemTotal'] - data['MemFree']) / data['MemTotal']) * 100 >> 'Mem_Used_Ratio'
+            memUsedRatio = (data['MemTotal'] - data['MemAvailable']) / data['MemTotal'] >> 'Mem_Used_Ratio'
+        except Exception as e:
+            a, b, c = sys.exc_info()
+            print(str(e)+' '+str(c.tb_lineno))
         self.stdd = memUsedRatio.std()
         self.mean = memUsedRatio.mean()
         memUsedRatio <<= data['timestamp']
         memUsedRatio <<= data['job_id']
         memUsedRatio <<= data['component_id']
-        #memUsedRatio <<= data['job_size']
 
         self.xfrm.push(memUsedRatio)
         return memUsedRatio
@@ -81,8 +86,8 @@ class rankMemByJob(Analysis):
     def _job_summary(self, job_id):
         ''' Get summarized information about jobs across components '''
         where_ = [ [ 'job_id', Sos.COND_EQ, job_id ] ]
-        self.src.select(self.metrics + 'job_size',
-                        from_ = [ self.schema ],
+        self.src.select(self.metrics,
+                        from_ = self.schema,
                         where = where_,
                         order_by = 'time_job_comp'
             )
@@ -130,7 +135,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                       from_ = [ self.schema ],
+                       from_ = self.schema,
                        where = where_,
                        order_by = 'time_job_comp'
             )
@@ -157,7 +162,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append(['timestamp', Sos.COND_LE, self.end])
         self.src.select(self.metrics,
-                        from_ = [ self.schema ],
+                        from_ = self.schema,
                         where = where_,
                         order_by = 'time_job_comp'
             )
@@ -186,7 +191,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                   from_ = [ self.schema ],
+                   from_ = self.schema,
                    where = where_,
                    order_by = 'time_comp'
             )
@@ -218,7 +223,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                   from_ = [ self.schema ],
+                   from_ = self.schema,
                    where = where_,
                    order_by = 'time_comp'
             )
