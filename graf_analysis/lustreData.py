@@ -16,7 +16,7 @@ class lustreData(Analysis):
         self.schema = schema
         self.src = SosDataSource()
         self.src.config(cont=cont)
-        self.job_metrics = [ 'mt-slurm[job_name]', 'mt-slurm[job_user]',
+        self.job_metrics = [ 'mt-slurm[job_name]', 'mt-slurm[job_user]', 'mt-slurm[job_id]',
                              'mt-slurm[job_start]', 'mt-slurm[job_end]', 'mt-slurm[job_size]' ]
         self.where_ = []
         self.where_ = [ [ 'job_id', Sos.COND_GT, 1 ] ]
@@ -88,31 +88,34 @@ class lustreData(Analysis):
             i = 0
             sumbytes = np.delete(sumbytes, 0)
             jids = sum_.array('job_id')[1:]
+            res = []
             while i < threshold:
                 if len(sumbytes) < 1:
                     break
                 index, val = max(enumerate(sumbytes), key=operator.itemgetter(1))
-                self.src.select(self.job_metrics + ['job_id'],
+                self.src.select(self.job_metrics,
                                 from_ = [ 'mt-slurm' ],
                                 where = [ [ 'job_id' , Sos.COND_EQ, jids[index] ] ],
                                 order_by = 'job_rank_time'
                     )
                 job = self.src.get_results()
+                res.append(job)
                 if job is None:
                     return None
+                job_start = np.min(job.array('job_start'))
                 if job.array('job_end')[0] < 1:
                     job_end = time.time()
                     ret_end.append(job_end*1000)
                     ret_state.append("In process")
                 else:
-                    job_end = job.array('job_end')[0]
-                    ret_end.append(job.array('job_end')[0]*1000)
+                    job_end = np.max(job.array('job_end'))
+                    ret_end.append(job_end*1000)
                     ret_state.append("Completed")
-                ret_bps.append(val / (job_end - job.array('job_start')[0]))
+                ret_bps.append(val / (job_end - job_start))
                 ret_jobs.append(job.array('job_id')[0])
                 ret_size.append(job.array('job_size')[0])
                 ret_name.append(job.array('job_name')[0])
-                ret_start.append(job.array('job_start')[0] * 1000)
+                ret_start.append(job_start * 1000)
                 ret_user.append(job.array('job_user')[0])
 
                 # remove job with highest bps from list of jobs
