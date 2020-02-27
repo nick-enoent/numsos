@@ -18,7 +18,7 @@ class metricRateBin(Analysis):
         self.end = end
         self.maxDataPoints = maxDataPoints
 
-    def get_data(self, metrics, job_id=0, params='buckets=50'):
+    def get_data(self, metrics, job_id=0, params=''):
         result = []
         datapoints = []
         where_ = [ [ 'timestamp', Sos.COND_GE, self.start ],
@@ -52,17 +52,20 @@ class metricRateBin(Analysis):
             data = self.xfrm.pop()
             hsum = None
             time_range = self.end - self.start
-            bin_width= int(time_range / 50)
+            bins = int(np.sqrt(time_range))
+            if bins > 50:
+                bins = 50
             for met_diff in metrics:
                 os = data.array(met_diff)
-                h = np.histogram(data.array('timestamp').astype('float'), bins=50,
+                
+                h = np.histogram(data.array('timestamp').astype('float'), bins=bins,
                                  weights=os, density=False)
                 if hsum is None:
                     ts = h[1][:-1] / 1000
                     hsum = np.zeros(h[0].shape)
                 hsum += h[0]
             res = DataSet()
-            res.append_array(len(hsum), str(metrics)+' '+str(bin_width)+'S bins', hsum)
+            res.append_array(len(hsum), str(metrics), hsum)
             res.append_array(len(ts), 'timestamp', ts) 
             return res 
         except Exception as e:
