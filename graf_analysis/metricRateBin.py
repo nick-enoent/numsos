@@ -18,11 +18,16 @@ class metricRateBin(Analysis):
         self.end = end
         self.maxDataPoints = maxDataPoints
 
-    def get_data(self, metrics, job_id=0, params=''):
+    def get_data(self, metrics, job_id=0, params='bins=10'):
+        self.bins = 10
         result = []
         datapoints = []
-        where_ = [ [ 'timestamp', Sos.COND_GE, self.start ],
-                   [ 'timestamp', Sos.COND_LE, self.end ]
+        time_range = self.end - self.start
+        offset = time_range * .01
+        if offset < 1:
+            offset = 1
+        where_ = [ [ 'timestamp', Sos.COND_GE, self.start - offset ],
+                   [ 'timestamp', Sos.COND_LE, self.end + offset ]
             ]
         if job_id > 0:
             where_.append(['job_id', Sos.COND_EQ, job_id])
@@ -45,16 +50,22 @@ class metricRateBin(Analysis):
                 resp = self.xfrm.next()
                 if resp is not None:
                     self.xfrm.concat()
+            self.xfrm.dup()
+            data = self.xfrm.pop()
 
             self.xfrm.diff(metrics, group_name="component_id",
                            keep=['timestamp'], xfrm_suffix='')
 
             data = self.xfrm.pop()
             hsum = None
-            time_range = self.end - self.start
-            bins = int(np.sqrt(time_range))
-            if bins > 50:
-                bins = 50
+            data_time = (data.array('timestamp')[-1].astype('float') - data.array('timestamp')[0].astype('float'))
+            data_time = data_time / 1000000
+            if data_time < time_range:
+                bins = int(data_time / time_range * 20)
+                if bins < 2:
+                    bins = 2
+            else:
+                bins = 20 
             for met_diff in metrics:
                 os = data.array(met_diff)
                 
