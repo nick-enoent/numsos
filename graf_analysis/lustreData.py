@@ -49,7 +49,10 @@ class lustreData(Analysis):
                        where = self.where_,
                        order_by = 'time_job_comp'
                 )
-            self.xfrm = Transform(self.src, None)
+            self.xfrm = Xfrm(self.src, None)
+            # set metrics in Xfrm class
+            self.xfrm.set_metrics(metrics)
+
             resp = self.xfrm.begin()
             if resp is None:
                 return None
@@ -57,16 +60,9 @@ class lustreData(Analysis):
                 resp = self.xfrm.next()
                 if resp is not None:
                     self.xfrm.concat()
-            
-            self.xfrm.diff(metrics, group_name='component_id',
-                           keep=['job_id'], xfrm_suffix='')
-            sum_ = self.xfrm.max(metrics, group_name='job_id',
-                                 keep=['job_id'], xfrm_suffix='')
 
-            job_sums = np.zeros(sum_.get_series_size())
-            for m in metrics:
-                job_sums += sum_.array(m)
-            return job_sums, sum_
+            self.xfrm.for_each(series_list=['job_id'], xfrm_fn=self.xfrm.job_diff)
+            return self.xfrm.sum_
         except Exception as e:
             a, b, c = sys.exc_info()
             print(str(e) + ' '+str(c.tb_lineno))
@@ -74,7 +70,7 @@ class lustreData(Analysis):
 
     def get_lustre_avg(self, metrics, threshold, meta=False):
         try:
-            sumbytes, sum_ = self._sum_metrics(metrics)
+            sumbytes = self._sum_metrics(metrics)
             if sumbytes is None:
                 return None
             ret_bps = []
@@ -87,7 +83,8 @@ class lustreData(Analysis):
             ret_size = []
             i = 0
             sumbytes = np.delete(sumbytes, 0)
-            jids = sum_.array('job_id')[1:]
+            #jids = sum_.array('job_id')
+            jids = self.xfrm.job_ids
             res = []
             while i < threshold:
                 if len(sumbytes) < 1:
@@ -139,3 +136,26 @@ class lustreData(Analysis):
             a, b, c = sys.exc_info()
             print(str(e)+' '+str(c.tb_lineno))
             return None
+
+class Xfrm(Transform):
+    def set_metrics(self, metrics):
+        self.metrics = metrics
+        self.job_ids = []
+        self.sum_ = []
+
+    def job_diff(self, values):
+        self.dup()
+        try:
+            self.diff(self.metrics, group_name='component_id',
+                      xfrm_suffix='')
+            self.max(self.metrics, xfrm_suffix='')
+            sum_ = self.pop()
+            rate = np.zeros(sum_.get_series_size())
+            for m in self.metrics:
+                rate += sum_.array(m)
+            self.job_ids.append(values[0])
+            self.sum_.append(rate)
+
+        except Exception as e:
+            a, b, c = sys.exc_info()
+            print(str(e)+' '+str(c.tb_lineno))
