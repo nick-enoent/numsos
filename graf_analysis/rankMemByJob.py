@@ -15,7 +15,7 @@ class rankMemByJob(Analysis):
         self.cont = cont
         self.start = int(start)
         self.end = end
-        self.maxDataPoints = 4096
+        self.mdp = 1000000
         self.src = SosDataSource()
         self.src.config(cont=cont)
 
@@ -24,8 +24,12 @@ class rankMemByJob(Analysis):
                          str(schema)+'[MemAvailable]']
 
     def get_data(self, metricNames=None, job_id=None, params=None):
+        ''' Handle parameters and call relevant method '''
         try:
-            if params is None:
+            if 'summary' in params:
+                if job_id == 0:
+                    print(" You must provide a valid job_id > 1 ")
+                    return None
                 res = self._job_summary(job_id)
                 return res
             if 'threshold' in params:
@@ -36,12 +40,12 @@ class rankMemByJob(Analysis):
                 if threshold < 0:
                     res = self._get_idle_low_mem(abs(threshold))
                 else:
-                    res = self._get_idle_high_mem(threshold)
+                    res = self._get_idle_high_mem(threshold+1)
             else:
                 if threshold < 0:
                     res = self._get_low_mem(abs(threshold))
                 else:
-                    res = self._get_high_mem(threshold)
+                    res = self._get_high_mem(threshold+1)
             return res
         except Exception as e:
             a, b, c = sys.exc_info()
@@ -49,28 +53,32 @@ class rankMemByJob(Analysis):
             return None
 
     def _mem_used_ratio(self):
-        self.xfrm = Transform(self.src, None)
-        resp = self.xfrm.begin()
-        while resp is not None:
-            resp = self.xfrm.next()
-            if resp is not None:
-                self.xfrm.concat()
+        ''' Memory utilization ratio calculation '''
         try:
+            self.xfrm = Transform(self.src, None, limit=self.mdp)
+            resp = self.xfrm.begin()
+            while resp is not None:
+                resp = self.xfrm.next()
+                if resp is not None:
+                    self.xfrm.concat()
+
             data = self.xfrm.top()
             memUsedRatio = (data['MemTotal'] - data['MemAvailable']) / data['MemTotal'] >> 'Mem_Used_Ratio'
+            self.stdd = memUsedRatio.std()
+            self.mean = memUsedRatio.mean()
+            memUsedRatio <<= data['timestamp']
+            memUsedRatio <<= data['job_id']
+            memUsedRatio <<= data['component_id']
+
+            self.xfrm.push(memUsedRatio)
+            return memUsedRatio
         except Exception as e:
             a, b, c = sys.exc_info()
             print(str(e)+' '+str(c.tb_lineno))
-        self.stdd = memUsedRatio.std()
-        self.mean = memUsedRatio.mean()
-        memUsedRatio <<= data['timestamp']
-        memUsedRatio <<= data['job_id']
-        memUsedRatio <<= data['component_id']
-
-        self.xfrm.push(memUsedRatio)
-        return memUsedRatio
+            return None
 
     def _get_job_times(self):
+        ''' Get job times for job_id > 1 '''
         self.xfrm.dup()
         self.xfrm.dup()
         self.xfrm.min([ 'timestamp' ], group_name='job_id',
@@ -89,7 +97,7 @@ class rankMemByJob(Analysis):
         self.src.select(self.metrics,
                         from_ = self.schema,
                         where = where_,
-                        order_by = 'time_job_comp'
+                        order_by = 'job_time_comp'
             )
 
         memUsedRatio = self._mem_used_ratio()
@@ -130,6 +138,7 @@ class rankMemByJob(Analysis):
         return res
 
     def _get_high_mem(self, threshold):
+        ''' Get high memory threshold nodes with running jobs '''
         where_ = [ [ 'job_id', Sos.COND_GT, 1 ],
                    [ 'timestamp', Sos.COND_GE, self.start ] ]
         if self.end > 0:
@@ -144,19 +153,19 @@ class rankMemByJob(Analysis):
             return None
         self.xfrm.dup()
         job_times = self._get_job_times()
-        keep_ = [ 'job_id', 'component_id' ]
+        keep_ = [ 'component_id' ]
         self.xfrm.max([ 'Mem_Used_Ratio' ], group_name='job_id',
                       keep=keep_, xfrm_suffix='')
         memUsedRatio = self.xfrm.pop()
         memUsedRatio <<= job_times['job_start']
         memUsedRatio <<= job_times['job_end']
-        memUsedRatio.array('Mem_Used_Ratio').sort(0)
+        top_jobs = np.sort(memUsedRatio.array('Mem_Used_Ratio'))
         if memUsedRatio.get_series_size() > threshold:
-            _max = memUsedRatio.array('Mem_Used_Ratio')[memUsedRatio.get_series_size() - (threshold)]
-            memUsedRatio = memUsedRatio > ('Mem_Used_Ratio', _max)
+             memUsedRatio = memUsedRatio > ('Mem_Used_Ratio', top_jobs[len(top_jobs) - threshold])
         return memUsedRatio
 
     def _get_low_mem(self, threshold):
+        ''' Get low memory threshold nodes with running jobs '''
         where_ = [ [ 'job_id', Sos.COND_GE, 1 ],
                    [ 'timestamp', Sos.COND_GE, self.start ] ]
         if self.end > 0:
@@ -171,17 +180,15 @@ class rankMemByJob(Analysis):
             return None
         self.xfrm.dup()
         job_times = self._get_job_times()
-        keep_ = [ 'job_id', 'component_id' ]
+        keep_ = [ 'component_id' ]
         self.xfrm.min([ 'Mem_Used_Ratio' ], group_name='job_id',
                                      keep=keep_, xfrm_suffix='')
         memUsedRatio = self.xfrm.pop()
         memUsedRatio <<= job_times['job_start']
         memUsedRatio <<= job_times['job_end']
-        memUsedRatio.array('Mem_Used_Ratio').sort(0)
+        bot_jobs = np.sort(memUsedRatio.array('Mem_Used_Ratio'))
         if memUsedRatio.get_series_size() > threshold:
-            _min = memUsedRatio.array('Mem_Used_Ratio')[threshold]
-            memUsedRatio = memUsedRatio < ('Mem_Used_Ratio', _min)
-            
+            memUsedRatio = memUsedRatio < ('Mem_Used_Ratio', bot_jobs[threshold])
         return memUsedRatio
 
     def _get_idle_high_mem(self, threshold):
@@ -198,24 +205,14 @@ class rankMemByJob(Analysis):
         memUsedRatio = self._mem_used_ratio()
         if memUsedRatio is None:
             return None
+        self.xfrm.max([ 'Mem_Used_Ratio' ], group_name='component_id',
+                      keep=['timestamp', 'job_id', 'component_id'])
+        memUsedRatio = self.xfrm.pop()
+        top_jobs = np.sort(memUsedRatio.array('Mem_Used_Ratio_max'))
         if memUsedRatio.get_series_size() > threshold:
-            ''' Check there are enough entries to slice '''
-            i = 0
-            while i < threshold:
-                _max = self.xfrm.max([ 'Mem_Used_Ratio' ], group_name='component_id',
-                                     keep=['timestamp', 'job_id', 'component_id'])
-                if i == 0:
-                    res = _max
-                else:
-                    res = res.concat(_max)
-                memUsedRatio = memUsedRatio < ('Mem_Used_Ratio', _max.array('Mem_Used_Ratio_max')[0])
-                self.xfrm.push(memUsedRatio)
-                i += _max.get_series_size()
-        else:
-            ''' Return all components '''
-            res = self.xfrm.pop()
-        return res
-        
+            memUsedRatio = memUsedRatio > ('Mem_Used_Ratio_max', top_jobs[len(top_jobs) - threshold])
+        return memUsedRatio
+
     def _get_idle_low_mem(self, threshold):
         ''' Get low mem threshold for idle nodes '''
         where_ = [ [ 'job_id', Sos.COND_EQ, 0 ],
@@ -230,18 +227,11 @@ class rankMemByJob(Analysis):
         memUsedRatio = self._mem_used_ratio()
         if memUsedRatio is None:
             return None
+        _min = self.xfrm.min([ 'Mem_Used_Ratio' ], group_name='component_id',
+                             keep=['timestamp', 'job_id', 'component_id'])
+        memUsedRatio = self.xfrm.pop()
+        bot_jobs = np.sort(memUsedRatio.array('Mem_Used_Ratio_min'))
         if memUsedRatio.get_series_size() > threshold:
-            i = 0
-            while i < threshold:
-                _min = self.xfrm.min([ 'Mem_Used_Ratio' ], group_name='component_id',
-                                     keep=['timestamp', 'job_id', 'component_id'])
-                if i == 0:
-                    res = _min
-                else:
-                    res = res.concat(_min)
-                memUsedRatio = memUsedRatio > ('Mem_Used_Ratio', _min.array('Mem_Used_Ratio_min')[0])
-                self.xfrm.push(memUsedRatio)
-                i += _min.get_series_size()
-        else:
-            res = self.xfrm.pop()
-        return res
+            memUsedRatio = memUsedRatio < ('Mem_Used_Ratio_min', bot_jobs[threshold])
+        return memUsedRatio 
+
