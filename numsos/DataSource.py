@@ -355,6 +355,8 @@ class CsvDataSource(DataSource):
 
     def get_results(self, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
+        if self.query_ is None:
+            return None
         if limit is None:
             limit = self.window
         if inputer is None:
@@ -555,6 +557,8 @@ class SosDataSource(DataSource):
                  previous window needs to be subtracted from the first
                  sample of the next window (see Transform.diff())
         """
+        if self.query_ is None:
+            return None
         if limit is None:
             limit = self.window
         if keep and self.last_result is None:
@@ -602,12 +606,13 @@ class SosDataSource(DataSource):
                  previous window needs to be subtracted from the first
                  sample of the next window (see Transform.diff())
         """
+        if self.query is None:
+            return None
         if limit is None:
             limit = self.window
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
-        inputer = None
-        count = self.query_.query(inputer, reset=reset, wait=wait)
+        count = self.query_.query(None, reset=reset, wait=wait)
         result = self.query_.to_dataframe()
         if keep:
             last_row = self.last_result.get_series_size() - keep
