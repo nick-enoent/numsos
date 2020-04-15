@@ -3,7 +3,7 @@ from numsos.Stack import Stack
 from sosdb.DataSet import DataSet
 
 class Transform(object):
-    def __init__(self, dataSrc, dataSink, limit=1024, intervalMs=None):
+    def __init__(self, dataSrc, dataSink, limit=1024*1024, intervalMs=None):
         self.source = dataSrc
         self.sink = dataSink
         self.stack = Stack()
@@ -159,7 +159,11 @@ class Transform(object):
         dataSet = DataSet()
         inp = self.pop()
         grp_ser = inp.array(series_name)
-        grp_mask = grp_ser == value
+        if value.ndim > 0:
+            key = bytearray(value)
+            grp_mask = [ key == bytearray(ent) for ent in grp_ser ]
+        else:
+            grp_mask = grp_ser == value
         grp_len = len(grp_ser[grp_mask])
         for name in inp.series:
             ser = inp.array(name)
@@ -176,21 +180,20 @@ class Transform(object):
         data = self.dup()
         self.unique(ser)
         u = self.pop()
-        l = len(values)
-        values.append(0)
-        for v in u[0]:
+        # values.append(0)
+        for v in u.array(0):
             # All rows where top[ser] == v
             self.push(data)
             self.group(ser, v)
-            values[l] = v
+            values.append(v)
             self._for_each(series_list, xfrm_fn, values)
 
     def for_each(self, series_list, xfrm_fn):
         ser = series_list.pop(0)
         data = self.dup()
         self.unique(ser)
-        unique_values = self.pop()[0]
-        for v in unique_values:
+        uv = self.pop().array(0)
+        for v in uv:
             # All rows where top[ser] == v
             self.push(data)
             self.group(ser, v)
@@ -388,7 +391,7 @@ class Transform(object):
         src = inp.array(series)[0:inp.get_series_size()]
         row = np.argmin(src)
         for col in range(0, inp.get_series_count()):
-            res[col,0] = inp.array(col)[row]
+            res.array(col)[0] = inp.array(col)[row]
         return self.stack.push(res)
 
     def max(self, series_list, group_name=None, xfrm_suffix="_max", keep=None, **kwargs):
@@ -415,7 +418,7 @@ class Transform(object):
         src = inp.array(series)[0:inp.get_series_size()]
         row = np.argmax(src)
         for col in range(0, inp.get_series_count()):
-            res[col,0] = inp.array(col)[row]
+            res.array(col)[0] = inp.array(col)[row]
         return self.stack.push(res)
 
     def std(self, series_list, group_name=None, xfrm_suffix="_std", keep=None, **kwargs):
@@ -463,7 +466,10 @@ class Transform(object):
         """
         inp = self.stack.pop()
         nda = inp.array(series_name)[0:inp.get_series_size()]
-        u = np.unique(nda)
+        if nda.ndim > 1:
+            u = np.unique(nda, axis=0)
+        else:
+            u = np.unique(nda)
 
         if result == None:
             result = series_name + "_unique"
