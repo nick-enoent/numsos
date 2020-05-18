@@ -1,6 +1,8 @@
+from __future__ import absolute_import
+from builtins import str
 import os, sys, traceback
 import datetime as dt
-from grafanaAnalysis import Analysis
+from graf_analysis.grafanaAnalysis import Analysis
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -42,7 +44,7 @@ class compMinMeanMax(Analysis):
         datapoints = []
         time_range = self.end - self.start
         if time_range > 4096:
-            bin_width = int(time_range / 200)
+            bin_width = int(time_range // 200)
         else:
             bin_width = 1
         for comp_id in compIds:

@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import next
 import cython
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, free
@@ -117,7 +118,7 @@ class TableInputer(object):
         if reset:
             row = query.begin()
         else:
-            row = query.next()
+            row = next(query)
         if row:
             self.row_count = 1
         else:
@@ -129,7 +130,7 @@ class TableInputer(object):
                 print(col.format(row[col_no]), end=' ', file=self.file)
                 col_no += 1
             print("", file=self.file)
-            row = query.next()
+            row = next(query)
             if row:
                 self.row_count += 1
             else:

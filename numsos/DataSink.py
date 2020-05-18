@@ -1,4 +1,7 @@
 from __future__ import print_function
+from builtins import str
+from builtins import range
+from builtins import object
 import numpy as np
 from sosdb import Sos
 from numsos import Csv
@@ -203,7 +206,7 @@ class SosDataSink(DataSink):
             except:
                 self.cont = Sos.Container()
                 create = self._get_arg('create', kwargs, required=False, default=False)
-                mode = self._get_arg('mode', kwargs, required=False, default=0664)
+                mode = self._get_arg('mode', kwargs, required=False, default=0o664)
                 if create:
                     # Create the database
                     self.cont.create(path=self.path, o_mode=mode)

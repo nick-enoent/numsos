@@ -132,7 +132,7 @@ if __name__ == "__main__":
     xfrm = Xfrm(src, None, limit=1024 * 1024)
     res = xfrm.begin()
     while res:
-        res = xfrm.next()
+        res = next(xfrm)
         if res is not None:
             # concatenate TOP and TOP~1
             xfrm.concat()

@@ -1,7 +1,7 @@
 import os, sys, traceback
 import datetime as dt
-from grafanaAnalysis import Analysis
-from grafanaFormatter import DataSetFormatter
+from graf_analysis.grafanaAnalysis import Analysis
+from graf_analysis.grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -27,7 +27,7 @@ class meanMetricRate(Analysis):
         self.src.select(metrics + ['timestamp' ],
                    from_ = [ self.schema ],
                    where = where_,
-                   order_by = 'time_job_comp'
+                   order_by = 'time_comp_job'
             )
         inp = None
 

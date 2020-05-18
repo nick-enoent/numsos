@@ -1,6 +1,11 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import next
+from builtins import str
 import os, sys, traceback, operator, time
 import datetime as dt
-from grafanaAnalysis import Analysis
+from graf_analysis.grafanaAnalysis import Analysis
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -57,7 +62,7 @@ class lustreData(Analysis):
             if resp is None:
                 return None
             while resp is not None:
-                resp = self.xfrm.next()
+                resp = next(self.xfrm)
                 if resp is not None:
                     self.xfrm.concat()
 
@@ -82,8 +87,6 @@ class lustreData(Analysis):
             ret_state = []
             ret_size = []
             i = 0
-            sumbytes = np.delete(sumbytes, 0)
-            #jids = sum_.array('job_id')
             jids = self.xfrm.job_ids
             res = []
             while i < threshold:
@@ -98,7 +101,9 @@ class lustreData(Analysis):
                 job = self.src.get_results()
                 res.append(job)
                 if job is None:
-                    return None
+                    sumbytes = np.delete(sumbytes, index)
+                    jids = np.delete(jids, index)
+                    continue
                 job_start = np.min(job.array('job_start'))
                 if job.array('job_end')[0] < 1:
                     job_end = time.time()
@@ -111,9 +116,9 @@ class lustreData(Analysis):
                 ret_bps.append(val / (job_end - job_start))
                 ret_jobs.append(job.array('job_id')[0])
                 ret_size.append(job.array('job_size')[0])
-                ret_name.append(job.array('job_name')[0])
+                ret_name.append(job.array('job_name')[0].decode())
                 ret_start.append(job_start * 1000)
-                ret_user.append(job.array('job_user')[0])
+                ret_user.append(job.array('job_user')[0].decode())
 
                 # remove job with highest bps from list of jobs
                 sumbytes = np.delete(sumbytes, index)
@@ -148,11 +153,12 @@ class Xfrm(Transform):
         try:
             self.diff(self.metrics, group_name='component_id',
                       xfrm_suffix='')
-            self.max(self.metrics, xfrm_suffix='')
+            #self.mean(self.metrics, xfrm_suffix='')
+            self.sum(self.metrics, xfrm_suffix='')
             sum_ = self.pop()
-            rate = np.zeros(sum_.get_series_size())
+            rate = 0
             for m in self.metrics:
-                rate += sum_.array(m)
+                rate += sum_.array(m)[0]
             self.job_ids.append(values[0])
             self.sum_.append(rate)
 

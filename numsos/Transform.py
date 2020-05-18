@@ -1,6 +1,35 @@
+from __future__ import division
+from builtins import range
+from builtins import object
 import numpy as np
 from numsos.Stack import Stack
 from sosdb.DataSet import DataSet
+from sosdb import Sos
+from numsos.DataSource import SosDataSource
+
+# String mapping service for kokkos_app job_tags
+class SHA256_Mapper:
+    def __init__(self, cont):
+        """Implements a SHA256 ---> String mapping service
+
+        kernel_names and job_tag are stored as SHA256 hash
+        values because the associated strings can be very large
+        """
+        self.src = SosDataSource()
+        self.src.config(cont=cont)
+
+    def string(self, sha256):
+        self.src.select([ '*' ],
+            from_    = [ 'sha256_string' ],
+            where    = [
+                        [ 'sha256', Sos.COND_EQ, sha256 ],
+                        ],
+            order_by = 'sha256',
+        )
+        res = self.src.get_results(limit=1)
+        if res:
+            return res.array('string')[0]
+        return ""
 
 class Transform(object):
     def __init__(self, dataSrc, dataSink, limit=1024*1024, intervalMs=None):
@@ -48,7 +77,7 @@ class Transform(object):
         """
         return self._next(count=count, wait=wait, reset=True)
 
-    def next(self, count=None, wait=None, keep=0):
+    def __next__(self, count=None, wait=None, keep=0):
         """Continue reading series from the data source
 
         Keyword Parameters:

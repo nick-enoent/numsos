@@ -1,4 +1,6 @@
 from __future__ import print_function
+from builtins import str
+from builtins import object
 import numpy as np
 from sosdb.DataSet import DataSet
 import textwrap

@@ -1,4 +1,8 @@
 from __future__ import print_function
+from builtins import next
+from builtins import str
+from builtins import range
+from builtins import object
 import numpy as np
 from sosdb import Sos
 from sosdb.DataSet import DataSet
@@ -281,7 +285,7 @@ class CsvDataSource(DataSource):
         else:
             schema = None
         if schema is None:
-            print("The schema {0} does not exist in this DataSource.")
+            print("The schema {0} does not exist in this DataSource.").format(name)
             return None
 
         print("{0:32} {1:8} {2:12} {3:8} {4}".format("Name", "Id", "Type", "Indexed", "Info"))
@@ -291,7 +295,7 @@ class CsvDataSource(DataSource):
         for attr in schema.attrs:
             info = None
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
-                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+                  attr.name(), attr.attr_id(), attr.type_name(), attr.is_indexed(), info))
 
     def select(self, columns):
         """Specify which columns from the CSV appear in a record
@@ -337,7 +341,7 @@ class CsvDataSource(DataSource):
         rec_count = 0
         while True:
             try:
-                line = self.fp.next()
+                line = next(self.fp)
             except:
                 return rec_count
             if line.startswith('#'):
@@ -462,7 +466,7 @@ class SosDataSource(DataSource):
             else:
                 info = ''
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
-                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+                  attr.name(), attr.attr_id(), attr.type_name(), attr.is_indexed(), info))
 
     def select(self, columns, where=None, order_by=None, from_=None, unique=False):
         """Specify which columns, order, and record selection criteria

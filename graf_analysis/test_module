@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+from __future__ import print_function
+from builtins import str
+from sosdb import Sos
+from numsos.Transform import Transform
+from numsos.ArgParse import ArgParse
+from sosdb import DataSet
+import importlib
+import numpy as np
+import datetime as dt
+import time
+import argparse
+import sys
+import cProfile
+
+def get_times_from_args(args):
+    if args.begin:
+        start = int(args.begin.strftime("%s"))
+    else:
+        start = time.time() - 86400
+    if args.end:
+        end = int(args.end.strftime("%s"))
+    else:
+        end = time.time()
+    if args.period:
+        end = time.time()
+        start = end - args.period
+    trange = end - start
+    return (start, end, trange)
+
+if __name__ == "__main__":
+    parser = ArgParse(description="Test for analysis modules. Prints returned dataset in it's entirety")
+    parser.add_argument(
+        "--schema", required=False, default="Lustre_Client",
+        help="The schema name. Defaults to Lustre_Client")
+    parser.add_argument(
+        "--module", required=False, default="lustreData",
+        help="The name of the module to be tested from graf_analysis. Defaults to lustreData")
+    parser.add_argument(
+        "--trange", required=False,
+        help="Set to the number of seconds prior to current time you would like to query for. \
+              Overrides start/end times")
+    parser.add_argument(
+        "--metrics", required=False, default='client.open#01,client.close#01,' \
+                'client.create#01,client.unlink#01',
+        help="Comma separated string of metrics to query for from the schema. \
+              Not used in all modules. Defaults to: \
+              'client.open#01,client.close#01,client.create#01,client.unlink#01'")
+    parser.add_argument(
+        "--job_id", required=False, default=0,
+        help="job_id to query for. Not used in all modules. Defaults to 0")
+    parser.add_argument(
+        "--params", required=False, default="threshold=10",
+        help="Parameters to provide for specific modules. Must be specified with format: \
+              'keyword=<paramter>'. \
+              Defaults to 'threshold=10' for lustreData")
+
+    args = parser.parse_args()
+
+    if args.trange:
+        print("trange specified")
+        start = time.time() - int(args.trange)
+        end = time.time()
+    else:
+        start, end, trange = get_times_from_args(args)
+    print('qStart: '+time.ctime(start))
+    print('qEnd: '+time.ctime(end))
+    analysis = args.module
+    print('Test for analysis module: '+analysis)
+    metrics = args.metrics.split(',')
+    job_id = int(args.job_id)
+
+    cont = Sos.Container(args.path)
+    stime = time.time()
+    print('start module'+str(time.ctime(stime)))
+    print('---------------------------------------')
+    print('\n')
+    #module = importlib.import_module('graf_analysis.'+analysis)
+    module = importlib.import_module(analysis)
+    class_ = getattr(module, analysis)
+    model = class_(cont, start, end, schema=args.schema, maxDataPoints=1000000)
+    print('model instantiated '+str(time.time() - stime))
+    print('---------------------------------------')
+    res = model.get_data(metrics, job_id, args.params)
+    print('get_data seconds running: '+str(time.time() - stime))
+    print('---------------------------------------')
+    if res is None:
+        print('No results from '+analysis+' with current parameter specifications')
+    else:
+        print(res.show())
+    print('end module runtime :'+str(time.ctime()))

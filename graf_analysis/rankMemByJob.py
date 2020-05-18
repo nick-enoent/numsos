@@ -1,10 +1,15 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import next
+from builtins import str
 import datetime as dt
 import time
 from sosdb import Sos
 from sosdb.DataSet import DataSet
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
-from grafanaAnalysis import Analysis
+from graf_analysis.grafanaAnalysis import Analysis
 import numpy as np
 import pandas as pd
 import sys
@@ -58,7 +63,7 @@ class rankMemByJob(Analysis):
             self.xfrm = Transform(self.src, None, limit=self.mdp)
             resp = self.xfrm.begin()
             while resp is not None:
-                resp = self.xfrm.next()
+                resp = next(self.xfrm)
                 if resp is not None:
                     self.xfrm.concat()
 

@@ -1,9 +1,12 @@
+from __future__ import division
+from builtins import range
+from builtins import object
 from sosdb import Sos
 from sosdb.DataSet import DataSet
 import numpy as np
 import copy
 
-class RowIter:
+class RowIter(object):
     def __init__(self, dataSet):
         self.dset = dataSet
         self.limit = dataSet.get_series_size()
@@ -14,17 +17,17 @@ class RowIter:
 
     def cvt(self, value):
         if type(value) == np.datetime64:
-            return [ value.astype(np.int64) / 1000 ]
+            return [ value.astype(np.int64) // 1000 ]
         return value
 
-    def next(self):
+    def __next__(self):
         if self.row_no >= self.limit:
             raise StopIteration
         res = [ self.cvt(self.dset[[col, self.row_no]]) for col in range(0, self.dset.series_count) ]
         self.row_no += 1
         return res
 
-class DataSetFormatter:
+class DataSetFormatter(object):
     def __init__(self, data, fmt):
          self.result = []
          self.data = data
@@ -77,7 +80,7 @@ class DataSetFormatter:
             del ds
         return self.result
 
-class DataFrameFormatter:
+class DataFrameFormatter(object):
     def fmt_table(self, data):
         return None
 

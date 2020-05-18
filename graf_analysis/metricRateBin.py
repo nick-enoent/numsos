@@ -1,7 +1,12 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import next
+from builtins import str
 import os, sys, traceback
 import datetime as dt
-from grafanaAnalysis import Analysis
-from grafanaFormatter import DataSetFormatter
+from graf_analysis.grafanaAnalysis import Analysis
+from graf_analysis.grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
@@ -16,7 +21,7 @@ class metricRateBin(Analysis):
         self.src.config(cont=cont)
         self.start = start
         self.end = end
-        self.maxDataPoints = maxDataPoints
+        self.mdp = maxDataPoints
 
     def get_data(self, metrics, job_id=0, params='bins=10'):
         self.bins = 10
@@ -40,14 +45,14 @@ class metricRateBin(Analysis):
             inp = None
 
             # default for now is dataframe - will update with dataset vs dataframe option
-            self.xfrm = Transform(self.src, None, limit=4096)
+            self.xfrm = Transform(self.src, None, limit=self.mdp)
             resp = self.xfrm.begin()
             if resp is None:
                 print('resp == None')
                 return None
 
             while resp is not None:
-                resp = self.xfrm.next()
+                resp = next(self.xfrm)
                 if resp is not None:
                     self.xfrm.concat()
             self.xfrm.dup()
@@ -59,9 +64,9 @@ class metricRateBin(Analysis):
             data = self.xfrm.pop()
             hsum = None
             data_time = (data.array('timestamp')[-1].astype('float') - data.array('timestamp')[0].astype('float'))
-            data_time = data_time / 1000000
+            data_time = data_time // 1000000
             if data_time < time_range:
-                bins = int(data_time / time_range * 20)
+                bins = int(data_time // time_range * 20)
                 if bins < 2:
                     bins = 2
             else:

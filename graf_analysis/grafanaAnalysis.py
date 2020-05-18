@@ -1,13 +1,50 @@
+from __future__ import absolute_import
+from __future__ import print_function
+from builtins import str
+from builtins import object
+import traceback
 from django.db import models
 import datetime as dt
 import time
 import os, sys, traceback, operator
+import numpy as np
+import pandas as pd
 from sosdb import Sos
 from sosdb.DataSet import DataSet
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
-import numpy as np
-import pandas as pd
+
+LOG_FILE = "/var/www/ovis_web_svcs/sosgui.log"
+LOG_DATE_FMT = "%F %T"
+
+# Log class for debugging
+class MsgLog(object):
+    def __init__(self, prefix):
+        self.prefix = prefix
+        self.fp = open(LOG_FILE, 'a')
+        self.dt_fmt = LOG_DATE_FMT
+
+    def write(self, obj):
+        now = dt.datetime.now()
+        pfx = now.strftime(self.dt_fmt)
+        pfx = pfx + ":" + self.prefix + ":"
+        if isinstance(obj, Exception):
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            self.fp.write(pfx + "\n")
+            traceback.print_exception(exc_type, exc_obj, exc_tb, 10, self.fp)
+        else:
+            self.fp.write(pfx + str(obj) + "\n")
+        self.fp.flush()
+
+    def __del__(self):
+        if self.fp:
+            self.fp.close()
+        self.fp = None
+
+    def close(self):
+        if self.fp:
+            self.fp.close()
+        self.fp = None
 
 # Base class for grafana analysis modules
 class Analysis(object):
@@ -92,8 +129,8 @@ class papiAnalysis(Analysis):
                 [ 'PAPI_TOT_INS[timestamp]',
                   'PAPI_TOT_INS[component_id]',
                   'PAPI_TOT_INS[job_id]',
-                  'PAPI_TOT_INS[rank]' ] + self.event_name_map.keys(),
-                       from_    = self.event_name_map.keys(),
+                  'PAPI_TOT_INS[rank]' ] + list(self.event_name_map.keys()),
+                       from_    = list(self.event_name_map.keys()),
                        where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
                                 ],
                        order_by = 'job_rank_time')
@@ -104,8 +141,8 @@ class papiAnalysis(Analysis):
                 # Job was too short to record data
                 return (None, None)
 
-            while res is not None and res.get_series_size() == 8192:
-                res = xfrm.next(count=8192)
+            while res is not None:
+                res = next(xfrm)
                 if res is not None:
                     # concatenate TOP and TOP~1
                     xfrm.concat()
@@ -169,7 +206,7 @@ class papiAnalysis(Analysis):
 
         except Exception as e:
             a, b, c = sys.exc_info()
-            print('derivedMetrics '+str(e)+' '+str(c.tb_lineno))
+            print('derived_metrics: Error: '+str(e)+' '+str(c.tb_lineno))
             return None
 
     def papi_rank_stats(self, xfrm, job):
@@ -211,5 +248,5 @@ class papiAnalysis(Analysis):
             return (events, mins, maxs, stats)
         except Exception as e:
             a, b, c = sys.exc_info()
-            print('papiRankStats '+str(e)+' '+str(c.tb_lineno))
+            print('papi_rank_stats: Error: '+str(e)+' '+str(c.tb_lineno))
             return (None, None, None, None)
