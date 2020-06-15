@@ -15,42 +15,31 @@ import pandas as pd
 import sys
 
 class rankMemByJob(Analysis):
-    def __init__(self, cont, start, end, schema='meminfo', maxDataPoints=4096):
-        self.schema = [ str(schema) ]
-        self.cont = cont
-        self.start = int(start)
-        self.end = end
-        self.mdp = 1000000
-        self.src = SosDataSource()
-        self.src.config(cont=cont)
-
-        self.metrics = [ str(schema)+'[job_id]', str(schema)+'[component_id]',
-                         str(schema)+'[timestamp]', str(schema)+'[MemTotal]',
-                         str(schema)+'[MemAvailable]']
-
-    def get_data(self, metricNames=None, job_id=None, params=None):
+    def get_data(self, metricNames=None, job_id=0, user_id=0, params=None):
         ''' Handle parameters and call relevant method '''
+        self.mdp = 1000000
+        self.metrics = [ str(self.schema)+'[job_id]', str(self.schema)+'[component_id]',
+                         str(self.schema)+'[timestamp]', str(self.schema)+'[MemTotal]',
+                         str(self.schema)+'[MemAvailable]']
         try:
-            if 'summary' in params:
+            self.parse_params(params)
+
+            if self.summary:
                 if job_id == 0:
-                    print(" You must provide a valid job_id > 1 ")
                     return None
                 res = self._job_summary(job_id)
                 return res
-            if 'threshold' in params:
-                threshold = int(params.split('=')[1])
-            else:
-                threshold = 5
-            if 'idle' in params:
-                if threshold < 0:
-                    res = self._get_idle_low_mem(abs(threshold))
+            
+            if self.idle:
+                if self.threshold < 0:
+                    res = self._get_idle_low_mem(abs(self.threshold))
                 else:
-                    res = self._get_idle_high_mem(threshold+1)
+                    res = self._get_idle_high_mem(self.threshold+1)
+
+            if self.threshold < 0:
+                res = self._get_low_mem(abs(self.threshold))
             else:
-                if threshold < 0:
-                    res = self._get_low_mem(abs(threshold))
-                else:
-                    res = self._get_high_mem(threshold+1)
+               res = self._get_high_mem(self.threshold+1)
             return res
         except Exception as e:
             a, b, c = sys.exc_info()
@@ -100,7 +89,7 @@ class rankMemByJob(Analysis):
         ''' Get summarized information about jobs across components '''
         where_ = [ [ 'job_id', Sos.COND_EQ, job_id ] ]
         self.src.select(self.metrics,
-                        from_ = self.schema,
+                        from_ = [ self.schema ],
                         where = where_,
                         order_by = 'job_time_comp'
             )
@@ -149,7 +138,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                       from_ = self.schema,
+                       from_ = [ self.schema ],
                        where = where_,
                        order_by = 'time_job_comp'
             )
@@ -176,7 +165,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append(['timestamp', Sos.COND_LE, self.end])
         self.src.select(self.metrics,
-                        from_ = self.schema,
+                        from_ = [ self.schema ],
                         where = where_,
                         order_by = 'time_job_comp'
             )
@@ -203,7 +192,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                   from_ = self.schema,
+                   from_ = [ self.schema ],
                    where = where_,
                    order_by = 'time_comp'
             )
@@ -225,7 +214,7 @@ class rankMemByJob(Analysis):
         if self.end > 0:
             where_.append([ 'timestamp', Sos.COND_LE, self.end ])
         self.src.select(self.metrics,
-                   from_ = self.schema,
+                   from_ = [ self.schema ],
                    where = where_,
                    order_by = 'time_comp'
             )

@@ -20,7 +20,7 @@ class compMinMeanMax(Analysis):
         self.end = end
         self.maxDataPoints = maxDataPoints
 
-    def get_data(self, metric, job_id, params=None):
+    def get_data(self, metric, job_id, user_id=0, params=None):
         metric = metric[0]
         if job_id == 0:
             return [ { 'target' : 'Error: Please specify valid job_id', 'datapoints' : [] } ]
@@ -40,6 +40,7 @@ class compMinMeanMax(Analysis):
                        'datapoints' : [] } ]
         else:
             compIds = np.unique(comps['component_id'].tolist())
+        print(compIds)
         result = []
         datapoints = []
         time_range = self.end - self.start
@@ -47,6 +48,7 @@ class compMinMeanMax(Analysis):
             bin_width = int(time_range // 200)
         else:
             bin_width = 1
+        dfs = []
         for comp_id in compIds:
             where_ = [
                 [ 'component_id', Sos.COND_EQ, comp_id ],
@@ -60,29 +62,18 @@ class compMinMeanMax(Analysis):
                        order_by = 'job_comp_time'
                 )
             # default for now is dataframe - will update with dataset vs dataframe option
-            inp = None
-            res = self.src.get_df(limit=self.maxDataPoints)
+            res = self.src.get_df(limit=self.maxDataPoints, index='timestamp')
             if res is None:
                 continue
-            rez = []
-            ts = pd.date_range(start=pd.Timestamp(self.start, unit='s'), end=pd.Timestamp(self.end, unit='s'), periods=len(res.values[0].flatten()))
-            series = pd.DataFrame(res.values[0].flatten(), index=ts)
-            rs = series.resample(str(bin_width)+'S').fillna("backfill")
-            datapoints.append(rs.values.flatten())
-            tstamp = rs.index
-        i = 0
-        tstamps = []
-        while i < len(tstamp):
-            ts = pd.Timestamp(tstamp[i])
-            ts = np.int_(ts.timestamp()*1000)
-            tstamps.append(ts)
-            i += 1
+            rs = res.resample(str(bin_width)+'S').fillna("backfill")
+            dfs.append(rs)
+        df = pd.concat(dfs, axis=1, ignore_index=True)
         res_ = DataSet()
-        min_datapoints = np.min(datapoints, axis=0)
-        mean_datapoints = np.mean(datapoints, axis=0)
-        max_datapoints = np.max(datapoints, axis=0)
+        min_datapoints = df.min(axis=1, skipna=True)
+        mean_datapoints = df.mean(axis=1, skipna=True)
+        max_datapoints = df.max(axis=1, skipna=True)
         res_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
         res_.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
         res_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
-        res_.append_array(len(tstamps), 'timestamp', tstamps)
+        res_.append_array(len(df.index), 'timestamp', df.index.values)
         return res_

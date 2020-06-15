@@ -617,7 +617,7 @@ class SosDataSource(DataSource):
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
         count = self.query_.query(None, reset=reset, wait=wait)
-        result = self.query_.to_dataframe()
+        result = self.query_.to_dataframe(index=index)
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):

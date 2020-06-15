@@ -57,6 +57,35 @@ class Analysis(object):
         self.src.config(cont=self.cont)
         self.mdp = maxDataPoints
 
+    def parse_params(self, params):
+        if params is None:
+            self.threshold = 5
+        else:
+            if 'threshold' in params:
+                self.threshold = int(params.split('=')[1])
+            else:
+                self.threshold = 5
+
+            if 'idle' in params:
+                self.idle = True
+            else:
+                self.idle = False
+
+            if 'summary' in params:
+                self.summary = True
+            else:
+                self.summary = False
+
+            if 'meta' in params:
+                self._meta = True
+            else:
+                self._meta = False
+
+            if 'bins' in params:
+                self.bins = int(params.split('=')[1])
+            else:
+                self.bins = 20
+
 class papiAnalysis(Analysis):
     def __init__(self, cont, start, end, schema=None, maxDataPoints=4096):
         self.cont = cont

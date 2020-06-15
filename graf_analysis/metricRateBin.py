@@ -23,7 +23,7 @@ class metricRateBin(Analysis):
         self.end = end
         self.mdp = maxDataPoints
 
-    def get_data(self, metrics, job_id=0, params='bins=10'):
+    def get_data(self, metrics, job_id=0, user_id=0, params='bins=10'):
         self.bins = 10
         result = []
         datapoints = []

@@ -5,6 +5,7 @@ from sosdb import Sos
 from numsos.Transform import Transform
 from numsos.ArgParse import ArgParse
 from sosdb import DataSet
+import pwd
 import importlib
 import numpy as np
 import datetime as dt
@@ -50,6 +51,9 @@ if __name__ == "__main__":
         "--job_id", required=False, default=0,
         help="job_id to query for. Not used in all modules. Defaults to 0")
     parser.add_argument(
+        "--user_name", required=False, default=None,
+        help="user_name to filter by. Not used in all modules. Defaults to None")
+    parser.add_argument(
         "--params", required=False, default="threshold=10",
         help="Parameters to provide for specific modules. Must be specified with format: \
               'keyword=<paramter>'. \
@@ -69,6 +73,14 @@ if __name__ == "__main__":
     print('Test for analysis module: '+analysis)
     metrics = args.metrics.split(',')
     job_id = int(args.job_id)
+    user_name = args.user_name
+    if user_name != None:
+        try:
+            pw = pwd.getpwnam(user_name)
+            user_id = pw.pw_uid
+        except:
+            print("No valid user found with user_name '"+user_name+"' specified.\n")
+            sys.exit()
 
     cont = Sos.Container(args.path)
     stime = time.time()
@@ -81,7 +93,7 @@ if __name__ == "__main__":
     model = class_(cont, start, end, schema=args.schema, maxDataPoints=1000000)
     print('model instantiated '+str(time.time() - stime))
     print('---------------------------------------')
-    res = model.get_data(metrics, job_id, args.params)
+    res = model.get_data(metrics, job_id, user_id, args.params)
     print('get_data seconds running: '+str(time.time() - stime))
     print('---------------------------------------')
     if res is None:

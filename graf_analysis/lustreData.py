@@ -30,20 +30,10 @@ class lustreData(Analysis):
         if self.end > 0:
             self.where_.append(['timestamp', Sos.COND_LE, self.end])
 
-    def get_data(self, metrics, job_id=None, params=None):
-        if params is not None:
-            if 'threshold' in params:
-               threshold = int(params.split('=')[1])
-            else:
-                threshold = 5
-            if 'meta' in params:
-                _meta = True
-            else:
-                _meta = False
-        else:
-            threshold = 5
-            _meta = False
-        res = self.get_lustre_avg(metrics, threshold, meta=_meta)
+    def get_data(self, metrics, job_id=None, user_id=0, params=None):
+        self.user_id = user_id
+        self.parse_params(params)
+        res = self.get_lustre_avg(metrics)
         return res
 
     def _sum_metrics(self, metrics):
@@ -73,7 +63,7 @@ class lustreData(Analysis):
             print(str(e) + ' '+str(c.tb_lineno))
             return None, None
 
-    def get_lustre_avg(self, metrics, threshold, meta=False):
+    def get_lustre_avg(self, metrics):
         try:
             sumbytes = self._sum_metrics(metrics)
             if sumbytes is None:
@@ -89,13 +79,16 @@ class lustreData(Analysis):
             i = 0
             jids = self.xfrm.job_ids
             res = []
-            while i < threshold:
+            while i < self.threshold:
                 if len(sumbytes) < 1:
                     break
                 index, val = max(enumerate(sumbytes), key=operator.itemgetter(1))
+                where_ = [ [ 'job_id' , Sos.COND_EQ, jids[index] ] ]
+                if self.user_id != 0:
+                    where_.append(['uid', Sos.COND_EQ, self.user_id])
                 self.src.select(self.job_metrics,
                                 from_ = [ 'mt-slurm' ],
-                                where = [ [ 'job_id' , Sos.COND_EQ, jids[index] ] ],
+                                where = where_,
                                 order_by = 'job_rank_time'
                     )
                 job = self.src.get_results()
@@ -125,7 +118,7 @@ class lustreData(Analysis):
                 jids = np.delete(jids, index)
                 i += 1
             res_ = DataSet()
-            if not meta:
+            if not self._meta:
                 res_.append_array(len(ret_bps), 'bps', ret_bps)
             else:
                 res_.append_array(len(ret_bps), 'ios', ret_bps)

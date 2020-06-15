@@ -18,7 +18,7 @@ class meanMetricRate(Analysis):
         self.end = end
         self.maxDataPoints = maxDataPoints
 
-    def get_data(self, metrics, job_id=0, params=None):
+    def get_data(self, metrics, job_id=0, user_id=0, params=None):
         result = []
         datapoints = []
         where_ = [ [ 'timestamp', Sos.COND_GE, self.start ],
