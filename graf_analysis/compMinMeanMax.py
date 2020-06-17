@@ -72,8 +72,8 @@ class compMinMeanMax(Analysis):
         min_datapoints = df.min(axis=1, skipna=True)
         mean_datapoints = df.mean(axis=1, skipna=True)
         max_datapoints = df.max(axis=1, skipna=True)
-        res_.append_array(len(min_datapoints), 'min_'+metric, min_datapoints)
-        res_.append_array(len(mean_datapoints), 'mean_'+metric, mean_datapoints)
-        res_.append_array(len(max_datapoints), 'max_'+metric, max_datapoints)
-        res_.append_array(len(df.index), 'timestamp', df.index.values)
+        res_ = pd.DataFrame({ "min_"+metric  : min_datapoints.values,
+                              "mean_"+metric : mean_datapoints.values,
+                              "max_"+metric  : max_datapoints.values,
+                              "timestamp"    : min_datapoints.index })
         return res_

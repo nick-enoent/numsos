@@ -4,6 +4,7 @@ from builtins import object
 from sosdb import Sos
 from sosdb.DataSet import DataSet
 import numpy as np
+import pandas as pd
 import copy
 
 class RowIter(object):
@@ -27,7 +28,7 @@ class RowIter(object):
         self.row_no += 1
         return res
 
-class DataSetFormatter(object):
+class DataFormatter(object):
     def __init__(self, data, fmt):
          self.result = []
          self.data = data
@@ -39,9 +40,9 @@ class DataSetFormatter(object):
 
     def ret_json(self):
          return self.fmt_data[self.fmt]()
-        
+
     def fmt_table(self):
-        """
+        '''
         [
         {
         "rows": [[[10500116.0], [ [6597484.0], [6594808.0]],
@@ -54,7 +55,15 @@ class DataSetFormatter(object):
                    ]
         }
         ]
-        """
+        '''
+        return None
+
+    def fmt_plot(self):
+        return None
+
+class DataSetFormatter(DataFormatter): 
+    def fmt_table(self):
+        ''' Format data from sosdb DataSet object '''
         if self.data is None:
             return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
@@ -71,7 +80,9 @@ class DataSetFormatter(object):
         if self.data is None:
             return [ { "target" : "", "datapoints" : [] } ]
 
-        for series in self.data.series[:-1]:
+        for series in self.data.series:
+            if series == 'timestamp':
+                continue
             ds = DataSet()
             ds.append_series(self.data, series_list=[series, 'timestamp'])
             plt_dict = { "target" : series }
@@ -80,9 +91,58 @@ class DataSetFormatter(object):
             del ds
         return self.result
 
-class DataFrameFormatter(object):
+class DataFrameFormatter(DataFormatter):
+    ''' Format Data from a pandas DataFrame object '''
     def fmt_table(self, data):
-        return None
+        ''' Format data from sosdb DataSet object '''
+        if self.data is None:
+            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
-    def fmt_plot(self, data):
-        return None
+        tbl_dict = { "type" : "table" }
+        tbl_dict['columns'] = [ { "text" : colName } for colName in self.data.columns ]
+        rows = []
+        for row in self.data.values
+            rows.append(list(row))
+        tbl_dict['rows'] = rows
+        return [ tbl_dict ]
+
+    def fmt_plot(self):
+        if self.data is None:
+            return [ { "target" : "", "datapoints" : [] } ]
+
+        for series in self.data.columns:
+            if series == 'timestamp':
+                continue
+            plt_dict = { "target" : series }
+            plt_dict['datapoints'] = self.fmt_df([series, 'timestamp']) 
+            self.result.append(plt_dict)
+        return self.result
+
+    def fmt_df(self, series):
+        ''' Format dataframe to output expected by grafana '''
+        aSet = []
+        for row_no in range(0, len(self.data)):
+            aRow = []
+            for col in series:
+                v = self.data[col].values[row_no]
+                typ = type(v)
+                if typ.__module__ == 'builtins':
+                    pass
+                elif typ == np.ndarray or typ == np.string_:
+                    v = str(v)
+                elif typ == np.float32 or typ == np.float64:
+                    v = float(v)
+                elif typ == np.int64 or typ == np.uint64:
+                    v = int(v)
+                elif typ == np.int32 or typ == np.uint32:
+                    v = int(v)
+                elif typ == np.int16 or typ == np.uint16:
+                    v = int(v)
+                elif typ == np.datetime64:
+                    # convert to milliseconds from microseconds
+                    v = v.astype(np.int64) // int(1e6)
+                else:
+                    raise ValueError("Unrecognized numpy type {0}".format(typ))
+                aRow.append(v)
+            aSet.append(aRow)
+        return aSet
