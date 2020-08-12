@@ -8,7 +8,6 @@ pkgpythondir=${pythondir}/numsos
 pkgpython_PYTHON = __init__.py \
 	Csv.py \
 	DataSource.py \
-	DataSink.py \
 	Stack.py \
 	Transform.py \
 	ArgParse.py
@@ -25,5 +24,5 @@ pkgpyexecdir = $(pkgpythondir)
 
 Inputer.c: Inputer.pyx
 	echo PYTHON_LDFLAGS are "$(PYTHON_LDFLAGS)"
-	cython --gdb $< -o $@
+	cython -3 --directive language_level=3 --gdb $< -o $@
 
