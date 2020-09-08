@@ -1,4 +1,3 @@
-from __future__ import print_function
 from builtins import next
 import cython
 from libc.stdint cimport *
@@ -116,9 +115,15 @@ class TableInputer(object):
     def input(self, query, reset=True):
         self.row_count = 0;
         if reset:
-            row = query.begin()
+            if not query.descending:
+                row = query.begin()
+            else:
+                row = query.end()
         else:
-            row = next(query)
+            if not query.descending:
+                row = next(query)
+            else:
+                row = query.prev()
         if row:
             self.row_count = 1
         else:
@@ -130,7 +135,10 @@ class TableInputer(object):
                 print(col.format(row[col_no]), end=' ', file=self.file)
                 col_no += 1
             print("", file=self.file)
-            row = next(query)
+            if not query.descending:
+                row = next(query)
+            else:
+                row = query.prev()
             if row:
                 self.row_count += 1
             else:
