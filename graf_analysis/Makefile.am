@@ -7,6 +7,8 @@ pkggrafanadir = ${pythondir}/graf_analysis
 pkggrafana_PYTHON = __init__.py \
 		grafanaAnalysis.py \
 		grafanaFormatter.py \
+		table_formatter.py \
+		time_series_formatter.py \
 		meanMetricRate.py \
 		metricRateBin.py \
 		compMinMeanMax.py \
