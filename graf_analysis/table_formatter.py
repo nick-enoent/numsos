@@ -11,21 +11,27 @@ class table_formatter(DataFormatter):
         if self.data is None:
             return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
-        tbl_dict = { "type" : "table" }
-        tbl_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
+        self.result = { "type" : "table" }
+        self.result['columns'] = [ { "text" : colName } for colName in self.data.series ]
         rows = []
         for row in RowIter(self.data):
             rows.append(row)
-        tbl_dict['rows'] = rows
-        return [ tbl_dict ]
+        self.result['rows'] = rows
+        return [ self.result ]
 
     def fmt_dataframe(self):
         if self.data is None:
-            return [ { "target" : "", "datapoints" : [] } ]
+            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
-        tbl_dict = { "type" : "table" }
-        tbl_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
+        plt_dict = { "type" : "table" }
+        plt_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
         for series in self.data.columns:
             plt_dict = { "columns" : series }
             self.result.append(plt_dict)
         return self.result
+
+    def fmt_builtins(self):
+        if self.data is None:
+            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
+        else:
+            return self.data

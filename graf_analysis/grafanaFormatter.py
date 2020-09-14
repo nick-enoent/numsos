@@ -32,14 +32,18 @@ class DataFormatter(object):
          self.fmt = type(self.data).__module__
          self.fmt_data = {
              'sosdb.DataSet' : self.fmt_dataset,
-             'pandas.core.frame' : self.fmt_dataframe
+             'pandas.core.frame' : self.fmt_dataframe,
+             'builtins' : self.fmt_builtins
          }
 
     def ret_json(self):
          return self.fmt_data[self.fmt]()
 
     def fmt_dataset(self):
-        return None
+        pass
 
     def fmt_dataframe(self):
-        return None
+        pass
+
+    def fmt_builtins(self):
+        pass

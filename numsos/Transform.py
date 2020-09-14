@@ -1,6 +1,3 @@
-from __future__ import division
-from builtins import range
-from builtins import object
 import numpy as np
 from numsos.Stack import Stack
 from sosdb.DataSet import DataSet
@@ -178,7 +175,7 @@ class Transform(object):
 
         col = 0
         for ser in series_list:
-            src = inp.array(ser)[0:inp.series_size]
+            src = np.nan_to_num(inp.array(ser)[0:inp.series_size])
             nda = res.array(col)
             nda[:] = xfrm_fn(src, **kwargs)
             col += 1

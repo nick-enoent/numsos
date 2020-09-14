@@ -1,8 +1,3 @@
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import next
-from builtins import str
 import datetime as dt
 import time
 from sosdb import Sos
@@ -29,7 +24,6 @@ class rankMemByJob(Analysis):
                     return None
                 res = self._job_summary(job_id)
                 return res
-            
             if self.idle:
                 if self.threshold < 0:
                     res = self._get_idle_low_mem(abs(self.threshold))
@@ -51,6 +45,9 @@ class rankMemByJob(Analysis):
         try:
             self.xfrm = Transform(self.src, None, limit=self.mdp)
             resp = self.xfrm.begin()
+            if resp is None:
+                return None
+
             while resp is not None:
                 resp = next(self.xfrm)
                 if resp is not None:
