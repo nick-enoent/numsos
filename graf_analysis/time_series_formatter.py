@@ -1,4 +1,4 @@
-from .grafanaFormatter import DataFormatter
+from graf_analysis.grafanaFormatter import DataFormatter
 from sosdb.DataSet import DataSet
 from sosdb import Sos
 import numpy as np
