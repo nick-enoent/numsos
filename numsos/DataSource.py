@@ -848,7 +848,7 @@ class SosDataSource(DataSource):
         self.last_result = result
         return self.last_result
 
-    def get_df(self, limit=None, wait=None, reset=True, keep=0, index=None):
+    def get_df(self, limit=None, wait=None, reset=True, keep=0, index=None, inputer=None):
 
         """Return a Pandas DataFrame from the DataSource
 
@@ -884,7 +884,9 @@ class SosDataSource(DataSource):
             limit = self.window
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
-        count = self.query_.query(None, reset=reset, wait=wait)
+        if inputer is None:
+            inputer = Sos.QueryInputer(self.query_, limit, start=keep)
+        count = self.query_.query(inputer, reset=reset, wait=wait)
         result = self.query_.to_dataframe(index=index)
         if keep:
             last_row = self.last_result.get_series_size() - keep
