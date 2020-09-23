@@ -15,7 +15,7 @@ class RowIter(object):
 
     def cvt(self, value):
         if type(value) == np.datetime64:
-            return [ value.astype(np.int64) // 1000 ]
+            return [ value.astype(np.int64) / 1000 ]
         return value
 
     def __next__(self):

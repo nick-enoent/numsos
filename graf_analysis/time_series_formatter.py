@@ -44,7 +44,7 @@ class time_series_formatter(DataFormatter):
                 typ = type(v)
                 if typ.__module__ == 'builtins':
                     pass
-                elif typ == np.ndarray or typ == np.string_:
+                elif typ == np.ndarray or typ == np.string_ or typ == np.str_:
                     v = str(v)
                 elif typ == np.float32 or typ == np.float64:
                     v = float(v)
