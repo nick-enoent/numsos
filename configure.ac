@@ -14,13 +14,14 @@ OPTION_DOC
 
 OPTION_DEFAULT_DISABLE([debug], [ENABLE_DEBUG])
 OPTION_DEFAULT_ENABLE([python], [ENABLE_PYTHON])
+OPTION_DEFAULT_ENABLE([grafana], [ENABLE_GRAFANA])
 OPTION_WITH_OR_BUILD([sos],[../sos],[sos/src sos/include ods/src ods/include])
 
 AM_PATH_PYTHON(,,[:])
 NUMPY_INCLUDE_PATH=$($PYTHON -c "import numpy; print(numpy.get_include())")
 which cython >/dev/null 2>&1 || AC_MSG_ERROR("cython not found")
 test -n "$NUMPY_INCLUDE_PATH" || AC_MSG_ERROR("numpy not found.")
-AX_PYTHON_DEVEL()
+AX_PYTHON_DEVEL([>='3.6'])
 AC_MSG_RESULT([${NUMPY_INCLUDE_PATH}])
 AC_SUBST([NUMPY_INCLUDE_PATH])
 
@@ -32,6 +33,7 @@ AC_SUBST(distdir)
 AC_CONFIG_FILES([
 		Makefile
 		numsos/Makefile
+		graf_analysis/Makefile
 ])
 
 AC_OUTPUT

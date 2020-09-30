@@ -12,11 +12,11 @@ import time
 import argparse
 import sys
 
-def do_job(cont, job_id, schema):
+def do_job(cont, job_id, args):
     src = SosDataSource()
     src.config(cont=cont)
-    src.select([ 'meminfo.*' ],
-               from_    = [ schema ],
+    src.select([ '*' ],
+               from_    = [ args.schema ],
                where    = [ [ 'job_id', Sos.COND_EQ, int(job_id) ]
                         ],
                order_by = 'job_comp_time')
@@ -81,9 +81,9 @@ def do_job(cont, job_id, schema):
     src = SosDataSource()
     src.config(cont=cont)
     src.select([ 'job_id', 'job_name', 'job_user' ],
-              from_    = [ 'jobinfo' ],
+              from_    = [ args.job_schema ],
               where    = [ [ 'job_id', Sos.COND_EQ, job_id ] ],
-              order_by = 'job_id')
+              order_by = 'job_rank_time')
     res = src.get_results(limit=1)
     result <<= ( 1, 'job_id', np.dtype('uint64'), job_id )
     result <<= ( 1, 'job_name', res.array('job_name').dtype, res.array('job_name')[0] )
@@ -94,19 +94,17 @@ def get_jobs(cont, args):
     (start, end) = get_times_from_args(args)
     src = SosDataSource()
     src.config(cont=cont)
-    src.select([ 'jobinfo.*' ],
-              from_    = [ 'jobinfo' ],
-              where    = [ [ 'job_start', Sos.COND_GE, start ],
-                           [ 'job_status', Sos.COND_EQ, 2 ]
-                         ],
-              order_by = 'job_comp_time')
-    xfrm = Transform(src, None, limit=4096)
+    src.select([ 'job_id' ],
+              from_    = [ args.schema ],
+               where    = [[ 'timestamp', Sos.COND_GE, start ],
+                           [ 'job_id', Sos.COND_GE, 1 ]],
+              order_by = 'time_comp_job')
+    xfrm = Transform(src, None, limit=1024*1024)
     res = xfrm.begin()
     if res is None:
         return None
     xfrm.unique('job_id', result='job_id')
     return xfrm.top()
-
 def get_times_from_args(args):
     if args.begin:
         start = int(args.begin.strftime("%s"))
@@ -123,6 +121,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--schema", required=False, default='meminfo',
         help="The meminfo schema name.")
+    parser.add_argument(
+        "--job_schema", required=False, default='mt-slurm',
+        help="The job information schema name.")
     args = parser.parse_args()
 
     cont = Sos.Container(args.path)
@@ -146,7 +147,7 @@ if __name__ == "__main__":
 
     for job_id in jobs['job_id']:
         job_id = int(job_id)
-        res = do_job(cont, job_id, args.schema)
+        res = do_job(cont, job_id, args)
         if not res:
             print("{0:8} No data...".format(job_id))
             continue

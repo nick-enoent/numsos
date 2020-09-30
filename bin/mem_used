@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 from sosdb import Sos
-from numsos.DataSource import SosDataSource
+from numsos.DataSource import datasource
 from numsos.DataSink import CsvDataSink, SosDataSink
 from numsos.Transform import Transform
 from sosdb import DataSet
@@ -28,13 +28,15 @@ def get_times_from_args(args):
 
 class Xfrm(Transform):
     def get_job_info(self, job_id):
-        src = SosDataSource()
+        src = datasource("sos")
         src.config(cont=self.source.cont)
         src.select([ 'job_id', 'job_name', 'job_user' ],
-                   from_    = [ 'jobinfo' ],
+                   from_    = [ 'mt-slurm' ],
                    where    = [ [ 'job_id', Sos.COND_EQ, job_id ] ],
-                   order_by = 'job_id')
+                   order_by = 'job_rank_time')
         res = src.get_results(limit=1)
+        if not res:
+            return "", ""
         return res.array('job_name')[0], res.array('job_user')[0]
 
     def mem_stats(self, values):
@@ -96,19 +98,19 @@ if __name__ == "__main__":
         help="The meminfo schema name.")
     args = parser.parse_args()
     (start, end) = get_times_from_args(args)
-    where = []
+    where = [[ 'job_id', Sos.COND_GE, 1 ]]
     if start > 0:
         where.append([ 'timestamp', Sos.COND_GE, start ])
     if end > 0:
         where.append([ 'timestamp', Sos.COND_LE, end ])
 
     cont = Sos.Container(args.path)
-    src = SosDataSource()
+    src = datasource("sos")
     src.config(cont=cont)
     src.select([ 'timestamp', 'job_id', 'component_id', 'MemTotal', 'MemFree' ],
                from_    = [ args.schema ],
                where    = where,
-               order_by = 'timestamp')
+               order_by = 'time_comp_job')
     print("{0:12} {1:12} {2:12} {3:12} {4:12} {5:12} {6:12} {7:12} {8:12} {9:12}".format(
         "Job ID", "Job Name", "User",
         "Job Size",
@@ -130,7 +132,7 @@ if __name__ == "__main__":
     xfrm = Xfrm(src, None, limit=1024 * 1024)
     res = xfrm.begin()
     while res:
-        res = xfrm.next()
+        res = next(xfrm)
         if res is not None:
             # concatenate TOP and TOP~1
             xfrm.concat()

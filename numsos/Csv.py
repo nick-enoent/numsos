@@ -1,3 +1,5 @@
+from builtins import object
+
 class Schema(object):
     def __init__(self, name):
         self.schema_name = name

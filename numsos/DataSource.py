@@ -1,123 +1,19 @@
-from __future__ import print_function
+from builtins import next
+from builtins import str
+from builtins import range
+from builtins import object
 import numpy as np
 from sosdb import Sos
 from sosdb.DataSet import DataSet
-from numsos import Csv
 from numsos import Inputer
 import datetime as dt
 import time
 import os
 import sys
 
-class TableInputer(object):
-    def __init__(self, query, limit, file=sys.stdout):
-        self.row_count = 0
-        self.limit = limit
-        self.file = file
-
-    @property
-    def capacity(self):
-        """Return the row capacity of the result"""
-        return self.row_limit
-
-    @property
-    def count(self):
-        """Return the number of rows in the result"""
-        return self.row_count
-
-    def input(self, query, reset=True):
-        self.row_count = 0;
-        if reset:
-            row = query.begin()
-        else:
-            row = query.next()
-        if row:
-            self.row_count = 1
-        else:
-            return True
-
-        while self.row_count < self.limit:
-            col_no = 0
-            for col in query.get_columns():
-                print(col.format(row[col_no]), end=' ', file=self.file)
-                col_no += 1
-            print("", file=self.file)
-            row = query.next()
-            if row:
-                self.row_count += 1
-            else:
-                break
-
-        if self.row_count == self.limit:
-            return False
-        return True
-
-class DebugInputer(object):
-    DEF_ARRAY_LIMIT = 256
-    def __init__(self, query, limit, start=0):
-        self.start = start
-        self.row_count = start
-        self.limit = limit
-        self.array_limit = self.DEF_ARRAY_LIMIT
-        self.query = query
-        self.dataset = DataSet()
-        for col in self.query.get_columns():
-            typ = col.attr_type
-            if typ == Sos.TYPE_TIMESTAMP:
-                typ_str = 'datetime64[us]'
-            elif typ == Sos.TYPE_STRUCT:
-                typ_str = 'uint8'
-            else:
-                typ_str = Sos.sos_type_strs[typ].lower()
-                typ_str = typ_str.replace('_array', '')
-
-            if typ >= Sos.TYPE_IS_ARRAY:
-                if typ == Sos.TYPE_STRING:
-                    data = np.zeros([ self.limit ],
-                                    dtype=np.dtype('|S{0}'.format(self.DEF_ARRAY_LIMIT)))
-                else:
-                    data = np.zeros([ self.limit, self.array_limit],
-                                    dtype=np.dtype(typ_str))
-            else:
-                data = np.zeros([ self.limit ], dtype=np.dtype(typ_str))
-            col.set_data(data)
-            self.dataset.append(ArrayDataByIndex(self.limit, [ col.col_name ], data))
-        self.reset(start=start)
-
-    def reset(self, start=0):
-        if start:
-            self.row_count = start
-        else:
-            self.row_count = self.start
-
-    def input(self, query, row):
-        for col in query.get_columns():
-            typ = col.attr_type
-            a = col.value
-            array = col.get_data()
-            if col.is_array or typ == Sos.TYPE_STRUCT:
-                if typ != Sos.TYPE_STRING:
-                    array[self.row_count,:len(a)] = a
-                else:
-                    array[self.row_count] = a
-            elif typ == Sos.TYPE_TIMESTAMP:
-                array[self.row_count] = (a[0] * 1000000) + a[1]
-            else:
-                array[self.row_count] = a
-        self.row_count += 1
-        if self.row_count == self.limit:
-            return False
-        return True
-
-    def get_results(self):
-        if self.row_count == 0:
-            return None
-        self.dataset.set_series_size(self.row_count)
-        return self.dataset
-
 class DataSource(object):
 
-    DEF_LIMIT     = 4096
+    DEF_LIMIT     = 1024 * 1024
     DEF_COL_WIDTH = 16
 
     """Implements a generic analysis Transform data source.
@@ -125,7 +21,8 @@ class DataSource(object):
     A DataSource  is a  generic interface to  a container.  An program
     does  not instantiate  the  DataSource, rather  it instantiates  a
     SosDataSource or CsvDataSource. A SosDataSource is backed by a SOS
-    Container, and a CsvDataSource is backed by a text file.
+    Container, a CsvDataSource is backed by a text file, and an Influx
+    DataSource is backed by an Influx database.
 
     The get_results() method of a DataSource returns data as a
     DataSet. A DataSet encapsulates on or more named data series. See
@@ -188,6 +85,19 @@ class DataSource(object):
             self.columns.append(c)
             col_no += 1
 
+    def insert(self, columns):
+        """Insert the series of a DataSet into the container
+
+        Specify which columns from the result are stored. The
+        column-specification array provides the order and series
+        name of each record from the result that is stored.
+
+        If this function is not called, all series in the
+        result record will be stored in the order present in the
+        result.
+        """
+        pass
+
     def col_by_name(self, name):
         for col in self.columns:
             if name == col.col_name:
@@ -207,7 +117,7 @@ class DataSource(object):
         The data is output to the sys.stdout or can be overridden with
         the 'file' keyword parameter. This is a utility function that
         makes it easy for developers to test their select() arguments
-        and visually inspec the data returned.
+        and visually inspect the data returned.
 
         Keyword Parameters:
 
@@ -220,7 +130,6 @@ class DataSource(object):
         reset -- Restart the query at 1st matching row.
 
         """
-
         if limit is None:
             limit = self.window
         last_name = None
@@ -241,7 +150,7 @@ class DataSource(object):
                   end=' ', file=file)
         print("", file=file)
 
-        inp = TableInputer(self, limit)
+        inp = Inputer.TableInputer(self, limit, file=file)
         count = self.query(inp, reset=reset)
 
         for col in self.get_columns():
@@ -388,7 +297,7 @@ class CsvDataSource(DataSource):
         else:
             schema = None
         if schema is None:
-            print("The schema {0} does not exist in this DataSource.")
+            print("The schema {0} does not exist in this DataSource.".format(name))
             return None
 
         print("{0:32} {1:8} {2:12} {3:8} {4}".format("Name", "Id", "Type", "Indexed", "Info"))
@@ -398,7 +307,7 @@ class CsvDataSource(DataSource):
         for attr in schema.attrs:
             info = None
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
-                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+                  attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
 
     def select(self, columns):
         """Specify which columns from the CSV appear in a record
@@ -444,7 +353,7 @@ class CsvDataSource(DataSource):
         rec_count = 0
         while True:
             try:
-                line = self.fp.next()
+                line = next(self.fp)
             except:
                 return rec_count
             if line.startswith('#'):
@@ -462,6 +371,8 @@ class CsvDataSource(DataSource):
 
     def get_results(self, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
+        if self.query_ is None:
+            return None
         if limit is None:
             limit = self.window
         if inputer is None:
@@ -481,7 +392,126 @@ class CsvDataSource(DataSource):
         self.last_result = result
         return self.last_result
 
+class InfluxDataSource(DataSource):
+    """Implement a Influx DB anaylsis Transform data source"""
+    def __init__(self):
+        DataSource.__init__(self)
+        self.separator = ","
+        self.fp = None
+        self.columns = None
+        self.colnames = None
+
+    def __getitem__(self, idx):
+        return self.cursor[idx[1]]
+
+    def config(self, **kwargs):
+        """Configure the Influx DataSource
+
+        If the 'path' argument is specified, it is used as the
+        DataSource input.  If the 'file' argument is specified, it
+        refers to a Python file descriptor. The 'path' and 'file'
+        arguments are mutually exclusive. If neither 'path' nor 'file'
+        is specified, input is read from sys.stdin.
+
+        Keyword Arguments:
+        path      - The path to the CSV file
+        file      - A Python file handle.
+        schema    - The schema name for the objects (rows)
+
+        """
+        self.database = self._get_arg('database', kwargs, required=True)
+        self.host = self._get_arg('host', kwargs, required=False)
+        self.port = self._get_arg('port', kwargs, required=False)
+        self.schema_name = self._get_arg('schema', kwargs, required=True)
+        #self.schema = Csv.Schema(self.schema_name)
+        from influxdb import InfluxDBClient
+
+        self.client = InfluxDBClient(host=self.host,
+                                     port=self.port,
+                                     database=self.database)
+
+    def query(self, query_str):
+        res = self.client.query(query_str)
+        res = list(res.get_points(measurement=self.schema_name))
+        return res
+        
+    def show_schemas(self):
+        """Show all the schema available in the DataSource"""
+        s = self.schema
+        col_len = len(s.name()) + 2
+        self.client.get_list_measurements()
+        print("{0:{width}} {1:12} {2}".format("Name", "Id", "Attr Count", width=col_len))
+        print("{0:{width}} {1:12} {2:12}".format('-'.ljust(col_len, '-'), '-'.ljust(12, '-'),
+                                                 '-'.ljust(12, '-'), width=col_len))
+        print("{0:{width}} {1:12} {2:12}".format(s.name(), s.schema_id(), s.attr_count(),
+                                                 width=col_len))
+
+    def select(self, columns):
+        """Specify which columns appear in a record
+
+        The attrs argument is an array of column-specifications.  The
+        column-identifier is a string, an integer or a ColSpec()
+        class.
+
+        If it is a string, it is either the wild-card '*' or a name
+        that must appear in the column header. The wild card '*' means
+        all columns in the file.
+
+        If it is an integer, it refers to the N-th column in the CSV
+        file beginning with column number 0.
+
+        If it is a ColSpec() class, please refer to the ColSpec() help
+        for more information.
+
+        Positional Parameters:
+        - An array of column-specifications
+
+        Example:
+
+            ds.select([
+                       'timestamp',
+                       ColSpec('component_id', cvt_fn=int)
+                       ColSpec('MemFree'),
+                      ])
+
+        """
+        self.reset()
+        if columns is None or columns[0] == '*':
+            columns = self.colnames
+        DataSource.select(self, columns)
+        for c in self.columns:
+            idx = self.colnames.index(c.col_name)
+            c.update(self, 0, Csv.Attr(self.schema, c.col_name, idx, Sos.TYPE_DOUBLE))
+
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
+                    inputer=None):
+        if self.query_ is None:
+            return None
+        if limit is None:
+            limit = self.window
+        if inputer is None:
+            inp = Inputer.Default(self, limit, start=keep)
+        else:
+            inp = inputer
+        if keep and self.last_result is None:
+            raise ValueError("Cannot keep results from an empty previous result.")
+        count = self.query_(inp, reset=reset, wait=wait)
+        result = inp.to_dataset()
+        if keep:
+            last_row = self.last_result.get_series_size() - keep
+            for row in range(0, keep):
+                for col in range(0, result.series_count):
+                    result[col, row] = self.last_result[col, last_row]
+                last_row += 1
+        self.last_result = result
+
 class SosDataSource(DataSource):
+    COND_GE = Sos.COND_GE
+    COND_LE = Sos.COND_LE
+    COND_GT = Sos.COND_GT
+    COND_LT = Sos.COND_LT
+    COND_NE = Sos.COND_NE
+    COND_EQ = Sos.COND_EQ
     """Implements a SOS DB analysis Transform data source.
     """
     def __init__(self):
@@ -489,6 +519,8 @@ class SosDataSource(DataSource):
         self.cont = None
         self.schema = None
         self.query_ = None
+        self.put_map = {}
+        self.ColSpec = Sos.ColSpec
 
     def reset(self):
         pass
@@ -512,7 +544,21 @@ class SosDataSource(DataSource):
         if self.path:
             if self.cont:
                 raise ValueError("The 'path' and 'cont' keywords are mutually exclusive")
-            self.cont = Sos.Container(self.path, Sos.PERM_RO)
+            try:
+                self.cont = Sos.Container(path=self.path, o_perm=Sos.PERM_RW)
+            except:
+                self.cont = Sos.Container()
+                create = self._get_arg('create', kwargs, required=False, default=False)
+                mode = self._get_arg('mode', kwargs, required=False, default=0o664)
+                if create:
+                    # Create the database
+                    self.cont.create(path=self.path, o_mode=mode)
+                    self.cont.open(self.path, o_perm=Sos.PERM_RW)
+                    self.cont.part_create("ROOT")
+                    part = self.cont.part_by_name("ROOT")
+                    part.state_set("primary")
+                else:
+                    raise ValueError("The container {0} does not exist.".format(self.path))
 
     def show_tables(self):
         """Show all the schema available in the DataSource"""
@@ -567,36 +613,164 @@ class SosDataSource(DataSource):
             else:
                 info = ''
             print("{0:32} {1:8} {2:12} {3:8} {4}".format(
-                attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
+                  attr.name(), attr.attr_id(), attr.type_name(), str(attr.is_indexed()), info))
 
-    def select(self, columns, where=None, order_by=None, from_=None, unique=False):
+    def get_schema(self, name):
+        """Return the schema named 'name'
+
+        Positional Parameter:
+        - The schema name
+
+        Returns:
+        The schema object or None if there is no schema by this name
+        """
+        schema = self.cont.schema_by_name(name)
+        return schema
+
+    def add_schema(self, template):
+        """Add a schema to the data source
+
+        parameters:
+
+        - template -- A dictionary that defines the name, attributes
+                      and indices in the schema.
+
+        A schema template is a Python dictionary:
+
+        {
+            "name"  : '<SCHEMA-NAME>',
+            "attrs" : [ <ATTR-DEFINITION>, ]
+        }
+
+        The "name" entry specifies the name of the schema and must be
+        unique within the container.
+
+        The "attrs" entry is a list of ATTR-DEFITION, each of which is
+        a Python dictionary.
+
+        {
+            "name" : "<string>",
+            "type" : "<string>",
+            "index" : { INDEX-DEFINITION }
+        }
+
+        The "name" entry specifies the name of the attribute in the
+        schema and must be unique within the schema.
+
+        The "type" attribute is a string specifying a type names
+        as follows:
+
+            - "INT16"
+            - "INT32"
+            - "INT64"
+            - "UINT16"
+            - "UINT32"
+            - "UINT64"
+            - "FLOAT"
+            - "DOUBLE",
+            - "LONG_DOUBLE"
+            - "TIMESTAMP"
+            - "STRUCT"
+            - "JOIN"
+            - "BYTE_ARRAY"
+            - "CHAR_ARRAY"
+            - "STRING"
+            - "INT16_ARRAY"
+            - "INT32_ARRAY"
+            - "INT64_ARRAY"
+            - "UINT16_ARRAY"
+            - "UINT32_ARRAY"
+            - "UINT64_ARRAY"
+            - "FLOAT_ARRAY"
+            - "DOUBLE_ARRAY"
+            - "LONG_DOUBLE_ARRAY"
+        Type names are not case sensitive.
+
+        If the type name is "JOIN", a "join_attrs" list is specified
+        that indicates which attributes are going to be combined
+        together to form the value of the "JOIN" attribute. Attributes
+        that are to be joined must have been previously defined in the
+        template.
+
+        A "JOIN" attributes does not consume any space in the object
+        as there values are computed on the fly from the other values
+        in the object. A "JOIN" attribute is used as a key values for
+        an index in order to order object data in the container.
+
+        The "index" entry is optional but if present, the attribute
+        value becomes the key to an index that will be associated with
+        the attribute. The contents of the dictionary object argument
+        to the index attribute specifies optional features of the
+        index. If it is empty, i.e. {}, the defaults are used for the
+        index.
+
+        Example Schema Template:
+
+        a_new_schema = \
+           { "name" : "a_new_schema",
+             "attrs" : [
+               { "name" : "timestamp", "type" : "timestamp", "index" : {} },
+               { "name" : "component_id", "type" : "uint64" },
+               { "name" : "flits", "type" : "double" },
+               { "name" : "stalls", "type" : "double" },
+               { "name" : "comp_time", "type" : "join",
+                 "join_attrs" : [ "component_id", "timestamp" ],
+                 "index" : {} }
+             ]
+           }
+
+        In this example, the "timestamp", and "comp_time" attributes
+        will be indexed.
+
+        schema = src.add_schema(a_new_schema)
+        """
+        if self.cont is None:
+            raise ValueError("The container is not open")
+        schema = Sos.Schema()
+        schema = schema.from_template(template['name'], template['attrs'])
+        schema.add(self.cont)
+
+    def select(self, columns, where=None, order_by=None, desc=False, from_=None, unique=False):
         """Specify which columns, order, and record selection criteria
 
         Positional Parameters:
-        -- An array of column-specifications
+
+        -- A list of column-specifications.
+
+           A column-specification can be a ColSpec, or a string. In
+           either case, the column-name is a interpretted as
+           schema-name '.'  attr-name. The schema-name portion will be
+           used to discriminate between schema present in the
+           container. The column-name schema-name '.*' and '*' are
+           wildcards to select all columns in a schema and all columns
+           in the from_ keyword parameter respectively.
 
         Keyword Arguments:
+
         from_     -- An array of schema name being queried (default is all)
+
         where     -- An array of query conditions
+
         order_by  -- The name of the attribute by which to order results
+                     If the order_by keyword is not specified, the
+                     first column in the column-specification is
+                     presumed to be the key. If this column is not
+                     indexed, an exception will be thrown.
+
+        desc      -- If set to True, the results will be returned in
+                     'reverse' order. The defalt is False
+
         unique    -- Return only a single result for each matching
                      the where condition
-
-        The 'attr' keyword parameter is an array of attribute
-        (i.e. column) names to include in the record.  The 'schema'
-        keyword is an array of strings specifying the schema
-        (i.e. tables) containing the attributes in the 'attr'
-        array. The 'where' argument is an array of filter criteria
-        (i.e. conditions) for the records to be returned.
 
         Examples:
 
             ds = SosDataSource()
             ds.config(path = '/DATA15/orion/ldms_data')
             ds.select([
-                       'meminfo.timestamp', 'meminfo.job_id', 'meminfo.component_id',
-                       'meminfo.MemFree', 'meminfo.MemAvailable',
-                       'vmstat.nr_free_pages'
+                       'meminfo[timestamp]', 'meminfo[job_id]', 'meminfo[component_id]',
+                       'meminfo[MemFree]', 'meminfo[MemAvailable]',
+                       'vmstat[nr_free_pages]'
                       ],
                       where    = [
                                    ('job_id', Sos.COND_GT, 1),
@@ -604,9 +778,13 @@ class SosDataSource(DataSource):
                                  ],
                       order_by = 'job_comp_time'
                      )
+
         """
         self.query_ = Sos.Query(self.cont)
-        self.query_.select(columns, where=where, from_ = from_, order_by = order_by, unique = unique)
+        self.query_.select(columns,
+                           where=where, from_ = from_,
+                           order_by = order_by, desc = desc,
+                           unique = unique)
 
         col_no = 0
         self.colnames = []
@@ -622,7 +800,7 @@ class SosDataSource(DataSource):
             return self.query_.query(inputer, reset=reset, wait=wait)
         return 0
 
-    def get_results(self, interval_ms=None, limit=None, wait=None, reset=True, keep=0,
+    def get_results(self, limit=None, wait=None, reset=True, keep=0,
                     inputer=None):
 
         """Return a DataSet from the DataSource
@@ -651,15 +829,16 @@ class SosDataSource(DataSource):
                  previous window needs to be subtracted from the first
                  sample of the next window (see Transform.diff())
         """
+        if self.query_ is None:
+            return None
         if limit is None:
             limit = self.window
         if keep and self.last_result is None:
             raise ValueError("Cannot keep results from an empty previous result.")
+        if inputer is None:
+            inputer = Sos.QueryInputer(self.query_, limit, start=keep)
         count = self.query_.query(inputer, reset=reset, wait=wait)
-        if not interval_ms:
-            result = self.query_.to_dataset()
-        else:
-            result = self.query_.to_timeseries(interval_ms=interval_ms, max_array=limit)
+        result = self.query_.to_dataset()
         if keep:
             last_row = self.last_result.get_series_size() - keep
             for row in range(0, keep):
@@ -668,3 +847,258 @@ class SosDataSource(DataSource):
                 last_row += 1
         self.last_result = result
         return self.last_result
+
+    def get_df(self, limit=None, wait=None, reset=True, keep=0, index=None, inputer=None):
+
+        """Return a Pandas DataFrame from the DataSource
+
+        The get_df() method returns the data identified by the
+        select() method as a Pandas DataFrame
+
+        Keyword Parameters:
+
+        limit -- The maximum number of records to return. This limits
+                 how large each series in the resulting DataFrame. If
+                 not specified, the limit is DataSource.window_size
+
+        index -- The column name to use as the DataFrame index
+
+        wait  -- A wait-specification that indicates how to wait for
+                 results if the data available is less than
+                 'limit'. See Sos.Query.query() for more information.
+
+        reset -- Set to True to re-start the query at the beginning of
+                 the matching data.
+
+        keep  -- Return [0..keep] as the [N-keep, N] values from the
+                 previous result. This is useful when the data from
+                 the previous 'window' needs to be combined with the
+                 the next window, for example when doing 'diff' over a
+                 large series of input data, the last sample from the
+                 previous window needs to be subtracted from the first
+                 sample of the next window (see Transform.diff())
+        """
+        if self.query is None:
+            return None
+        if limit is None:
+            limit = self.window
+        if keep and self.last_result is None:
+            raise ValueError("Cannot keep results from an empty previous result.")
+        if inputer is None:
+            inputer = Sos.QueryInputer(self.query_, limit, start=keep)
+        count = self.query_.query(inputer, reset=reset, wait=wait)
+        result = self.query_.to_dataframe(index=index)
+        if keep:
+            last_row = self.last_result.get_series_size() - keep
+            for row in range(0, keep):
+                for col in range(0, result.series_count):
+                    result[col, row] = self.last_result[col, last_row]
+                last_row += 1
+        self.last_result = result
+        return self.last_result
+
+    def insert(self, key, schema_name, mapping):
+        """Insert data from a dataset into a container
+
+        This method builds a mapping of series names from a
+        dataset to attribute names in a schema.
+
+        The 'key' parameter specifies a name that will be used to
+        lookup the mapping when put_results() is called to actually
+        store the data. This is typically schema_name, however, it can
+        be any unique name such that different mappings can be used
+        for the same schema.
+
+        This function does not store any data. See the put_results()
+        function for information on how to store the data.
+
+        The 'mapping' parameter is a list of dictionaries:
+
+        [ <map-entry>, ... ]
+
+        Each <map-entry> is a dictionary:
+
+        {
+            "series-name" : <name>,
+            "attr-name"   : <name>,
+            "cvt-fn"      : python_function
+        }
+
+        The "series-name" is the name of the series in the DataSet to
+        be stored. The "attr-name" is an attribute name in the object
+        schema. The optional "cvt-fn" is the name of a Python method
+        that will be used process each entry in the series before
+        storing it in the object. If not present, the value from the
+        dataset series will be stored without modification.
+
+        If a series from the dataset is not present in the map, it
+        will not be stored in the object.
+
+        Parameters:
+
+        - The dataset that will be inserted. This is used to build a
+          map from the series in the dataset to the attributes in the
+          schema
+
+        - The schema that will used to hold the series data from the
+          dataset
+
+        Example:
+
+        src.insert( "mySchema", "mySchema",
+            [
+                { "series-name" : "job_id",       "attr-name" : "job_id" },
+                { "series-name" : "job_name",     "attr-name" : "job_name" },
+                { "series-name" : "component_id", "attr-name" : "component_id" },
+                { "series-name" : "start_time",   "attr-name" : "timestamp",
+                  "cvt-fn" : cvt_time_fn }
+                . . .
+            ])
+
+        while True:
+            data = src.get_results()
+            if data:
+               # do my analysis
+               result = analyze(data)
+               src.put_results(result, )
+            else:
+               break
+
+        """
+        if "key" in self.put_map:
+            raise ValueError("A mapping named {0} already exists".format(key))
+
+        schema = self.cont.schema_by_name(schema_name)
+        if schema is None:
+            raise ValueError("The schema {0} does not exist".format(schema_name))
+
+        key_map = { "schema_name" : schema_name, "schema" : schema, "cvt" : False }
+        key_list = []
+        obj_cols = np.zeros([ len(mapping) ], np.dtype(int))
+        cvt_fns = []
+        col = 0
+        for m in mapping:
+            # Each entry is the
+            attr = schema[m['attr-name']]
+            if attr is None:
+                raise ValueError("The attribute {0} does not exist in {1}".\
+                                 format(m['attr-name'], schema_name))
+
+            obj_cols[col] = attr.attr_id()
+            if 'cvt_fn' in m:
+                cvt_fns.append(m['cvt_fn'])
+                key_map['cvt'] = True
+            else:
+                cvt_fns.append(None)
+            col += 1
+        key_map['obj_cols'] = obj_cols
+        key_map['cvt_fns'] = cvt_fns
+        self.put_map[key] = key_map
+
+    def get_schema(self, schema_name):
+        schema = self.cont.schema_by_name(schema_name)
+        return schema
+
+    def put_results(self, ins_key, results):
+        """Save DataSet results.
+
+        Parameters:
+        - The 'key' that was specified to the insert() function
+        - The results to store
+        """
+        if ins_key not in self.put_map:
+            raise ValueError("The {0} mapping is not present, did you do "\
+                             "an insert()?".format(ins_key))
+
+        mapping = self.put_map[ins_key]
+        obj_cols = mapping['obj_cols']
+        col_count = len(obj_cols)
+        cvt_fns = mapping['cvt_fns']
+
+        ds_cols = []
+        for col in range(0, col_count):
+            ds_cols.append(results.array(col))
+
+        schema = mapping['schema']
+        for row_no in range(0, results.get_series_size()):
+            obj = schema.alloc()
+            if not obj:
+                raise MemoryError("An object could not be allocated")
+            for col in range(0, col_count):
+                if cvt_fns[col] is None:
+                    obj[obj_cols[col]] = ds_cols[col][row_no]
+                else:
+                    obj[obj_cols[col]] = cvt_fns(ds_cols[col][row_no])
+            obj.index_add()
+
+    def put_df(self, ins_key, results):
+        """Save DataFrame results.
+
+        Parameters:
+        - The 'key' that was specified to the insert() function
+        - The results to store
+        """
+        if ins_key not in self.put_map:
+            raise ValueError("The {0} mapping is not present, did you do "\
+                             "an insert()?".format(ins_key))
+
+        mapping = self.put_map[ins_key]
+        obj_cols = mapping['obj_cols']
+        col_count = len(obj_cols)
+        cvt_fns = mapping['cvt_fns']
+
+        records = results.to_records()
+        schema = mapping['schema']
+        for row_no in range(0, len(results)):
+            obj = schema.alloc()
+            if not obj:
+                raise MemoryError("An object could not be allocated")
+            for col in range(0, col_count):
+                if cvt_fns[col] is None:
+                    obj[obj_cols[col]] = records[row_no][col]
+                else:
+                    obj[obj_cols[col]] = cvt_fns(records[row_no][col])
+            obj.index_add()
+
+def datasource(name, path=None, create=False, mode=0o660):
+    """
+    Opens and/or creates an instance of a data source.
+
+    Postional Arguments:
+
+      name - The DataSource provider name. This is currently one of:
+             "csv"    : Comma Separated File. The path is location of the file.
+             "influx" : InfluxDB. The path is the URL.
+             "sos"    : Scalable Object Store. The path is the location of the container.
+
+    Keyword Arguments:
+
+      path   - The path is file system path, or URL depending on the type. If not specified,
+               use the config method.
+
+      create - if set to True, the container will be created if it does not already exist
+
+      mode   - Octal number specifying the file mode bits. Ignored if create is False
+
+
+    Example:
+
+      ds = datasource("sos", "/DATA/my_container", create = True, mode = Oo660)
+
+      This will open the SOS container at /DATA/my_container. If the container does
+      not already exist, one will be created, and the permissions on the container
+      will be -rw-rw----
+    """
+    if name.upper() == "SOS":
+        src = SosDataSource()
+    elif name.upper() == "CSV":
+        src = CsvDataSource()
+    elif name.upper() == "INFLUX":
+        src = InfluxDataSource()
+    else:
+        raise NotImplementedError(name + " is not implemented")
+    if path and src:
+        src.config(path=path)
+    if not src:
+        raise NotImplementedError(name + " is not implemented")
+    return src

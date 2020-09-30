@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import object
 import argparse
 import datetime as dt
 import re
@@ -47,61 +48,96 @@ def fmt_begin_date(days):
     return dt.datetime.fromtimestamp(now)
 
 class ArgParse(object):
-    def __init__(self, description):
+    """A convenience class for building configuring argparse for analysis commands.
+
+    The class provides arguments for entering date and time
+    constraints from the command line, for example 'hourly', 'daily',
+    'weekly', 'monthly', 'begin', and 'end'. Options for accepting
+    container location and creation options are also provided.
+
+    After calling parse_args, the following class attributes are
+    populated:
+
+    begin - A datetime object specifying the start of the analysis
+            period.
+    end   - A datetime object specifying the end of the analysis period.
+
+    -- Postional Parameters
+
+        - A description for the command that is displayed in the usage message
+
+    -- Keyword Parameters
+
+    options= If None, all options are included, otherwise:
+        'datetime' - Include all the date convenience options
+        'create'   - Include the container create mode options.
+    """
+    def __init__(self, description, options=None):
+        self.begin = self.end = None
         self.parser = argparse.ArgumentParser(description=description)
         self.parser.add_argument(
             "--path", required=True,
             help="The path to the database.")
         self.parser.add_argument(
-            "--create", action="store_true",
-            help="Create a new SOS database. " \
-            "The --path parameter specifies the path to the new " \
-            "database.")
-        self.parser.add_argument(
-            "--mode", metavar="FILE-CREATION-MASK", type=int,
-            help="The permissions to assign to SOS database files.")
-        self.parser.add_argument(
             "--verbose", action="store_true",
             help="Request verbose query output")
-        self.parser.add_argument(
-            "--monthly", action="store_true",
-            help="Show results in the last 30 days")
-        self.parser.add_argument(
-            "--weekly", action="store_true",
-            help="Show results in the last 7 days")
-        self.parser.add_argument(
-            "--daily", action="store_true",
-            help="Show results in the last 24 hours")
-        self.parser.add_argument(
-            "--today", action="store_true",
-            help="Show today's results (since midnight)")
-        self.parser.add_argument(
-            "--hourly", action="store_true",
-            help="Show results in the last hour")
-        self.parser.add_argument(
-            "--begin",
-            type=valid_date,
-            help="Specify the start time/date for similar jobs. " \
-            "Format is [CC]YY/MM/DD HH:MM or [CC]YY-MM-DD HH:MM")
-        self.parser.add_argument(
-            "--end",
-            type=valid_date,
-            help="Specify the end time/date for similar jobs. ")
-        self.parser.add_argument(
-            "--period",
-            type=period_spec,
-            help="Specify a period for the analysis." \
-            "The format is [count][units] where," \
-            "  count : A number\n" \
-            "  units :\n" \
-            "        s - seconds\n" \
-            "        m - minutes\n" \
-            "        h - hours\n" \
-            "        d - days\n")
+        if options is None or 'create' in options:
+            self.parser.add_argument(
+                "--create", action="store_true",
+                help="Create a new SOS database. " \
+                "The --path parameter specifies the path to the new " \
+                "database.")
+            self.parser.add_argument(
+                "--mode", metavar="FILE-CREATION-MASK", type=int,
+                help="The permissions to assign to SOS database files.")
+        if options is None or 'datetime' in options:
+            self.parser.add_argument(
+                "--monthly", action="store_true",
+                help="Show results in the last 30 days")
+            self.parser.add_argument(
+                "--weekly", action="store_true",
+                help="Show results in the last 7 days")
+            self.parser.add_argument(
+                "--daily", action="store_true",
+                help="Show results in the last 24 hours")
+            self.parser.add_argument(
+                "--today", action="store_true",
+                help="Show today's results (since midnight)")
+            self.parser.add_argument(
+                "--hourly", action="store_true",
+                help="Show results in the last hour")
+            self.parser.add_argument(
+                "--begin",
+                type=valid_date,
+                help="Specify the start time/date for similar jobs. " \
+                "Format is [CC]YY/MM/DD HH:MM or [CC]YY-MM-DD HH:MM")
+            self.parser.add_argument(
+                "--end",
+                type=valid_date,
+                help="Specify the end time/date for similar jobs. ")
+            self.parser.add_argument(
+                "--period",
+                type=period_spec,
+                help="Specify a period for the analysis." \
+                "The format is [count][units] where," \
+                "  count : A number\n" \
+                "  units :\n" \
+                "        s - seconds\n" \
+                "        m - minutes\n" \
+                "        h - hours\n" \
+                "        d - days\n")
+
     def add_argument(self, *args, **kwargs):
+        """Add an additional option to the argument parser.
+
+        NB: While it's not clear to the author why this isn't called
+        add_option, this class minics the underlying Python
+        argparser's naming
+        """
         return self.parser.add_argument(*args, **kwargs)
 
     def parse_args(self):
+        """Parse the command line options"""
         args = self.parser.parse_args()
         if args.today or args.daily or args.weekly or args.monthly:
             if args.begin or args.end:
@@ -126,15 +162,3 @@ class ArgParse(object):
             args.begin = fmt_begin_date(30)
 
         return args
-
-    def get_times(self, args):
-        if args.begin:
-            start = int(args.begin.strftime("%s"))
-        else:
-            start = 0
-        if args.end:
-            end = int(args.end.strftime("%s"))
-        else:
-            end = 0
-        return (start, end)
-
