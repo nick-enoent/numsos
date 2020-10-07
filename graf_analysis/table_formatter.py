@@ -12,23 +12,21 @@ class table_formatter(DataFormatter):
             return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
         self.result = { "type" : "table" }
-        self.result['columns'] = [ { "text" : colName } for colName in self.data.series ]
+        self.result["columns"] = [ { "text" : colName } for colName in self.data.series ]
         rows = []
         for row in RowIter(self.data):
             rows.append(row)
-        self.result['rows'] = rows
+        self.result["rows"] = rows
         return [ self.result ]
 
     def fmt_dataframe(self):
         if self.data is None:
             return [ { "columns" : [], "rows" : [], "type" : "table" } ]
 
-        plt_dict = { "type" : "table" }
-        plt_dict['columns'] = [ { "text" : colName } for colName in self.data.series ]
-        for series in self.data.columns:
-            plt_dict = { "columns" : series }
-            self.result.append(plt_dict)
-        return self.result
+        self.result = { "type" : "table" }
+        self.result["columns"] = [ { "text" : colName } for colName in self.data.columns ]
+        self.result["rows"] = self.data.to_numpy()
+        return [ self.result ]
 
     def fmt_builtins(self):
         if self.data is None:
