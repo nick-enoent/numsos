@@ -13,4 +13,8 @@ pkggrafana_PYTHON = __init__.py \
 		metricRateBin.py \
 		compMinMeanMax.py \
 		rankMemByJob.py \
-		lustreData.py
+		lustreData.py \
+		papiJobsTable.py \
+		papiJobStatTable.py \
+		papiMeanJobMetrics.py \
+		papiTimeseries.py
