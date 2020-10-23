@@ -6,7 +6,6 @@ from builtins import str
 import os, sys, traceback
 import datetime as dt
 from graf_analysis.grafanaAnalysis import Analysis
-from graf_analysis.grafanaFormatter import DataSetFormatter
 from numsos.DataSource import SosDataSource
 from numsos.Transform import Transform
 from sosdb.DataSet import DataSet
