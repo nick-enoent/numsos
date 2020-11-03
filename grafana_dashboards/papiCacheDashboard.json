@@ -3,7 +3,7 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": "Sos",
         "enable": false,
         "hide": false,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -30,7 +30,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 22,
-  "iteration": 1603312359657,
+  "iteration": 1604420693994,
   "links": [],
   "panels": [
     {
@@ -81,16 +81,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L1_ICM",
           "target": "PAPI_L1_ICM",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -182,16 +185,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L1_DCM",
           "target": "PAPI_L1_DCM",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -283,16 +289,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "",
           "target": "l1_miss_rate",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -384,16 +393,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L1_ICM",
           "target": "l1_miss_ratio",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -485,16 +497,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L2_ICA",
           "target": "PAPI_L2_ICA",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -586,16 +601,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L2_TCA",
           "target": "PAPI_L2_TCA",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -687,16 +705,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L2_TCM",
           "target": "PAPI_L2_TCM",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -788,16 +809,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "",
           "target": "l2_miss_rate",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -854,12 +878,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
         "y": 36
       },
+      "hiddenSeries": false,
       "id": 18,
       "legend": {
         "avg": false,
@@ -874,6 +900,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -884,20 +913,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L2_ICM",
           "target": "l2_miss_ratio",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L2 Miss Ratio",
       "tooltip": {
@@ -949,12 +982,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
         "y": 36
       },
+      "hiddenSeries": false,
       "id": 20,
       "legend": {
         "avg": false,
@@ -969,6 +1004,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -979,20 +1017,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L2_TCA",
           "target": "l2_bw",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L2 Bandwidth",
       "tooltip": {
@@ -1044,12 +1086,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
         "y": 45
       },
+      "hiddenSeries": false,
       "id": 22,
       "legend": {
         "avg": false,
@@ -1064,6 +1108,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1074,20 +1121,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L3_TCA",
           "target": "PAPI_L3_TCA",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L3 Total Cache Accesses",
       "tooltip": {
@@ -1139,12 +1190,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
         "y": 45
       },
+      "hiddenSeries": false,
       "id": 23,
       "legend": {
         "avg": false,
@@ -1159,6 +1212,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1169,20 +1225,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L3_TCM",
           "target": "PAPI_L3_TCM",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L3 Total Cache Misses",
       "tooltip": {
@@ -1234,12 +1294,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
         "y": 54
       },
+      "hiddenSeries": false,
       "id": 24,
       "legend": {
         "avg": false,
@@ -1254,6 +1316,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1264,20 +1329,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L3_TCM",
           "target": "l3_miss_rate",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L3 Miss Rate",
       "tooltip": {
@@ -1329,12 +1398,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
         "y": 54
       },
+      "hiddenSeries": false,
       "id": 25,
       "legend": {
         "avg": false,
@@ -1349,6 +1420,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1359,20 +1433,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L3_TCA",
           "target": "l3_miss_ratio",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L3 Miss Ratio",
       "tooltip": {
@@ -1424,12 +1502,14 @@
         "overrides": []
       },
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
         "y": 63
       },
+      "hiddenSeries": false,
       "id": 26,
       "legend": {
         "avg": false,
@@ -1444,6 +1524,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1454,20 +1537,24 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "PAPI_L3_TCA",
           "target": "l3_bw",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "L3 Bandwidth",
       "tooltip": {
@@ -1540,8 +1627,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": "7628519",
-          "value": "7628519"
+          "text": "7631778",
+          "value": "7631778"
         },
         "hide": 0,
         "includeAll": false,
@@ -1562,8 +1649,8 @@
     ]
   },
   "time": {
-    "from": "2020-10-21T19:47:48.000Z",
-    "to": "2020-10-21T19:49:27.000Z"
+    "from": "2020-11-03T16:23:05.000Z",
+    "to": "2020-11-03T16:24:43.000Z"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -1590,7 +1677,7 @@
     ]
   },
   "timezone": "",
-  "title": "Papi Job Cache Dashboard",
+  "title": "Cache Dashboard",
   "uid": "Y31zpIjmk",
-  "version": 18
+  "version": 23
 }

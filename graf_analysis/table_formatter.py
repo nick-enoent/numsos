@@ -9,7 +9,7 @@ class table_formatter(DataFormatter):
     def fmt_dataset(self):
         # Format data from sosdb DataSet object
         if self.data is None:
-            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
+            return {"columns" : [{ "text" : "No papi jobs in time range" }] }
 
         self.result = { "type" : "table" }
         self.result["columns"] = [ { "text" : colName } for colName in self.data.series ]
@@ -17,19 +17,19 @@ class table_formatter(DataFormatter):
         for row in RowIter(self.data):
             rows.append(row)
         self.result["rows"] = rows
-        return [ self.result ]
+        return self.result
 
     def fmt_dataframe(self):
         if self.data is None:
-            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
+            return {"columns" : [{ "text" : "No papi jobs in time range" }] }
 
         self.result = { "type" : "table" }
         self.result["columns"] = [ { "text" : colName } for colName in self.data.columns ]
         self.result["rows"] = self.data.to_numpy()
-        return [ self.result ]
+        return self.result
 
     def fmt_builtins(self):
         if self.data is None:
-            return [ { "columns" : [], "rows" : [], "type" : "table" } ]
+            return { "columns" : [], "rows" : [], "type" : "table" }
         else:
             return self.data

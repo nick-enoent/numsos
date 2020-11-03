@@ -63,9 +63,9 @@ class metricRateBin(Analysis):
             data = self.xfrm.pop()
             hsum = None
             data_time = (data.array('timestamp')[-1].astype('float') - data.array('timestamp')[0].astype('float'))
-            data_time = data_time // 1000000
+            data_time = data_time / 1000000
             if data_time < time_range:
-                bins = int(data_time // time_range * 20)
+                bins = int(data_time / time_range * 20)
                 if bins < 2:
                     bins = 2
             else:

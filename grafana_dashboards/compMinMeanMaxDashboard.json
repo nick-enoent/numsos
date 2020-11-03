@@ -16,7 +16,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 23,
-  "iteration": 1603312907067,
+  "iteration": 1604420539758,
   "links": [],
   "panels": [
     {
@@ -70,6 +70,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -190,6 +191,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -293,6 +295,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": "0",
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -396,6 +399,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": "0",
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -499,6 +503,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": "0",
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -602,6 +607,7 @@
           "analysis": "compMinMeanMax",
           "comp_id": "0",
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "job_comp_time",
           "job_id": "$job_id",
@@ -714,8 +720,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": "7628520",
-          "value": "7628520"
+          "text": "7631774",
+          "value": "7631774"
         },
         "datasource": "Sos",
         "definition": "",
@@ -739,8 +745,8 @@
     ]
   },
   "time": {
-    "from": "2020-10-21T20:41:05.001Z",
-    "to": "2020-10-21T20:41:35.001Z"
+    "from": "2020-11-03T16:18:48.001Z",
+    "to": "2020-11-03T16:18:57.001Z"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -770,5 +776,5 @@
   "timezone": "",
   "title": "Memory Min Mean and Max across Components",
   "uid": "Z_hUS5SZk",
-  "version": 57
+  "version": 59
 }

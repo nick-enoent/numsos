@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import print_function
-from builtins import str
-from builtins import object
 import traceback
 from django.db import models
 import datetime as dt
@@ -87,13 +83,8 @@ class Analysis(object):
                 self.bins = 20
 
 class papiAnalysis(Analysis):
-    def __init__(self, cont, start, end, schema=None, maxDataPoints=4096):
-        self.cont = cont
-        self.schema = schema
-        self.start = start
-        self.end = end
-        self.src = SosDataSource()
-        self.src.config(cont=self.cont)
+    def __init__(self, cont, start, end, schema=None, maxDataPoints=1000000):
+        super().__init__(cont, start, end, schema=schema, maxDataPoints=maxDataPoints)
         self.mdp = maxDataPoints
         self.job_status_str = {
             1 : "running",

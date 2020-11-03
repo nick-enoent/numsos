@@ -16,7 +16,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 19,
-  "iteration": 1603307781584,
+  "iteration": 1604422439180,
   "links": [],
   "panels": [
     {
@@ -67,16 +67,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "load_rate",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -168,16 +171,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "store_rate",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -269,16 +275,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "ld_ins",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -370,16 +379,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "sr_ins",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -471,16 +483,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "cpi",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -572,16 +587,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
+          "extra_params": "",
           "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "uopi",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -673,16 +691,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "fp_ops",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -774,16 +795,19 @@
       "steppedLine": false,
       "targets": [
         {
+          "analysis": "papiTimeseries",
           "comp_id": 0,
           "container": "$container",
-          "format": "papi_timeseries",
+          "extra_params": "",
+          "format": "time_series",
           "index": "comp_time",
           "job_id": "$job_id",
-          "query_type": "papi_timeseries",
+          "query_type": "analysis",
           "refId": "A",
           "schema": "$schema",
           "target": "br_ins",
-          "type": "timeserie"
+          "type": "timeserie",
+          "user_name": ""
         }
       ],
       "thresholds": [],
@@ -861,8 +885,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": "7628484",
-          "value": "7628484"
+          "text": "7631778",
+          "value": "7631778"
         },
         "hide": 0,
         "includeAll": false,
@@ -883,8 +907,8 @@
     ]
   },
   "time": {
-    "from": "2020-10-21T19:12:51.000Z",
-    "to": "2020-10-21T19:14:29.000Z"
+    "from": "2020-11-03T16:23:05.000Z",
+    "to": "2020-11-03T16:24:43.000Z"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -912,7 +936,7 @@
     ]
   },
   "timezone": "",
-  "title": "Papi Job CPU Statistics",
+  "title": "CPU Statistics",
   "uid": "BOMrw_rik",
-  "version": 10
+  "version": 16
 }
