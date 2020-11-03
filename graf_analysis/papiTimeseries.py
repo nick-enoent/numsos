@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import time
 import sys
-from IPython.core.debugger import set_trace
 
 class papiTimeseries(papiAnalysis):
     def __init__(self, cont, start, end, schema=None, maxDataPoints=10000):
