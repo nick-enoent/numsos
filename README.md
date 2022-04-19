@@ -6,7 +6,7 @@ Numsos is an analysis and formatting application for Ovis Meta data.
 
 mkdir build && cd build
 
-../configure --prefix=</opt/ovis/> --with-sos=</opt/ovis>
+../configure --prefix=</opt/ovis/> --with-sos=</opt/ovis> PYTHON=</path/to/python3>
 
 make && make install
 
