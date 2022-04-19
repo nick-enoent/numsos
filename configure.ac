@@ -1,5 +1,5 @@
 AC_PREREQ(2.63)
-AC_INIT([numsos], 1.1.1, tom@ogc.us)
+AC_INIT([numsos], 1.1.1, tom@ogc.us, nick@ogc.us)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR(config)
 AM_CONFIG_HEADER(config.h)
