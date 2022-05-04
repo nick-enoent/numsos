@@ -48,8 +48,22 @@ class Analysis(object):
         self.schema = schema
         self.start = float(start)
         self.end = float(end)
-        self.query = Sos.SqlQuery(cont, 1000)
+        self.query = Sos.SqlQuery(cont, maxDataPoints)
         self.mdp = maxDataPoints
+
+    def get_all_data(self, query):
+        df = query.next()
+        if df is None:
+           return None
+        res = df.copy(deep=True)
+        while df is not None:
+            df = query.next()
+            res = pd.concat([df, res])
+        return res
+
+    def select_clause(self, metrics):
+        select = f'select {",".join(metrics)} from {self.schema}'
+        return select
 
     def get_where(self, filters):
         where_clause = f'where (timestamp > {self.start}) and (timestamp < {self.end})'
