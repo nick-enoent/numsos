@@ -18,7 +18,7 @@ class metricRate(Analysis):
             res = res[~res.index.duplicated(keep='first')]
             ret = pd.DataFrame(res['timestamp'].astype('int') / 1e6 , columns=['timestamp'])
             res = res.drop('timestamp', axis=1)
-            res = res.groupby(['component_id'], as_index=False).diff()
+            res = res.groupby(['component_id'], as_index=False).diff().fillna(0)
             ret.insert(1, f'Active Rate', res['Active'], True)
             return ret
         except Exception as e:
