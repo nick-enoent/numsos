@@ -22,7 +22,9 @@ Inputer_la_LIBADD = @SOS_LIBDIR_FLAG@ @SOS_LIB64DIR_FLAG@ -lsos
 
 pkgpyexecdir = $(pkgpythondir)
 
+CYTHON_GDB = $(shell [ "$(uname -p)" = "x86_64" ] && echo --gdb || echo "" )
+
 Inputer.c: Inputer.pyx
 	echo PYTHON_LDFLAGS are "$(PYTHON_LDFLAGS)"
-	cython -3 --directive language_level=3 --gdb $< -o $@
+	cython -3 --directive language_level=3 $(CYTHON_GDB) $< -o $@
 
