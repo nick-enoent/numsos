@@ -1,4 +1,3 @@
-import traceback
 from django.db import models
 import datetime as dt
 import time
@@ -47,11 +46,30 @@ class Analysis(object):
     def __init__(self, cont, start, end, schema=None, maxDataPoints=4096):
         self.cont = cont
         self.schema = schema
-        self.start = start
-        self.end = end
-        self.src = SosDataSource()
-        self.src.config(cont=self.cont)
+        self.start = float(start)
+        self.end = float(end)
+        self.query = Sos.SqlQuery(cont, maxDataPoints)
         self.mdp = maxDataPoints
+
+    def get_all_data(self, query):
+        df = query.next()
+        if df is None:
+           return None
+        res = df.copy(deep=True)
+        while df is not None:
+            df = query.next()
+            res = pd.concat([df, res])
+        return res
+
+    def select_clause(self, metrics):
+        select = f'select {",".join(metrics)} from {self.schema}'
+        return select
+
+    def get_where(self, filters):
+        where_clause = f'where (timestamp > {self.start}) and (timestamp < {self.end})'
+        for filt in filters:
+            where_clause += f' and ({filt})'
+        return where_clause
 
     def parse_params(self, params):
         if params is None:
